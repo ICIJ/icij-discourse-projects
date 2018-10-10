@@ -3,6 +3,8 @@
 # version: 0.0.1
 # authors: Madeline O'Leary
 
+register_asset 'stylesheets/common/select-kit/combo-box.scss'
+
 after_initialize do
 
   require_dependency "app/models/topic_list"
