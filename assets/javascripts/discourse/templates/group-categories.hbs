@@ -1,0 +1,71 @@
+<div class="container group {{model.group.name}}">
+  <div class='group-details-container'>
+    <div class='group-info'>
+      {{#if model.group.flair_url}}
+        <span class='group-avatar-flair'>
+          {{avatar-flair
+            flairURL=model.group.flair_url
+            flairBgColor=model.group.flair_bg_color
+            flairColor=model.group.flair_color
+            groupName=model.group.name}}
+        </span>
+      {{/if}}
+
+      <span>
+        <span class='group-info-name'>{{model.group.name}}</span>
+
+        <div>
+          {{#if model.group.full_name}}<span class='group-info-full-name'>{{model.group.name}}</span>{{/if}}
+        </div>
+      </span>
+    </div>
+
+    {{#if model.group.bio_cooked}}
+      <hr>
+
+      <div class='group-bio'>
+        <p>{{{model.group.bio_cooked}}}</p>
+      </div>
+    {{/if}}
+
+    <div class="group-details-button">
+      {{group-membership-button
+          class="inline"
+          model=model.group
+          showLogin='showLogin'}}
+
+      {{#if displayGroupMessageButton}}
+        {{d-button
+            action="messageGroup"
+            class="btn-primary group-message-button inline"
+            icon="envelope"
+            label="groups.message"}}
+      {{/if}}
+    </div>
+  </div>
+
+  <div class="list-controls">
+    <div class="container">
+      {{group-categories-navigation group=model currentPath=application.currentPath tabs=tabs}}
+
+      {{gc-navigation
+        canCreateTopic=canCreateTopic
+        createTopic=(route-action "createTopic")
+        createTopicDisabled=cannotCreateTopicOnCategory
+        hasDraft=draft
+        editCategory=(route-action "editCategory" category)}}
+    </div>
+  </div>
+
+<div class='clear'></div>
+
+<div class="categories-and-latest">
+  <div class='column categories'>
+    {{categories-only categories=model.categories}}
+  </div>
+
+  <div class='column'>
+    {{categories-topic-list topics=model.topics filter="latest" class="latest-topic-list"}}
+  </div>
+</div>
+</div>

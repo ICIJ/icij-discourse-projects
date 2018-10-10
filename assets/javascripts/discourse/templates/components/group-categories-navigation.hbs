@@ -1,0 +1,37 @@
+{{#mobile-nav class='group-nav' desktopClass="nav nav-pills" currentPath=currentPath}}
+  {{#if site.mobileView}}
+    <li>
+      {{#link-to "groups.index"}}
+        {{i18n "groups.index.all"}}
+      {{/link-to}}
+    </li>
+  {{else}}
+    {{group-categories-dropdown content=group.icij_group_names value=group.group.name}}
+  {{/if}}
+
+  <li>
+    {{#link-to "group" }}
+      {{d-icon 'users'}} Members ({{group.group.user_count}})
+    {{/link-to}}
+  </li>
+
+  <li>
+    {{#link-to "group.activity" }}
+      Activity
+    {{/link-to}}
+  </li>
+
+  <li>
+    {{#link-to "group.messages" }}
+      Messages
+    {{/link-to}}
+  </li>
+
+  {{#if currentUser.admin}}
+    <li>
+      {{#link-to "group.manage" }}
+        {{d-icon 'wrench'}} Manage
+      {{/link-to}}
+    </li>
+  {{/if}}
+{{/mobile-nav}}

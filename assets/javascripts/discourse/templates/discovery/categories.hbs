@@ -1,0 +1,8 @@
+{{group-category-dropdown content=model.icij_group_names}}
+
+{{#discovery-categories refresh="refresh"}}
+  {{component categoryPageStyle
+              categories=model.categories
+              latestTopicOnly=latestTopicOnly
+              topics=model.topics}}
+{{/discovery-categories}}
