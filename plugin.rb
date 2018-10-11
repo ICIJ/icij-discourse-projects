@@ -4,6 +4,7 @@
 # authors: Madeline O'Leary
 
 register_asset 'stylesheets/common/select-kit/combo-box.scss'
+register_asset 'stylesheets/common/select-kit/category-chooser'
 
 after_initialize do
 
