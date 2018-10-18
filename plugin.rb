@@ -8,44 +8,8 @@ register_asset 'stylesheets/common/select-kit/category-chooser'
 
 after_initialize do
 
-  require_dependency "app/models/topic_list"
-  class ::TopicList
-    attr_accessor :icij_group_names
-
-    def icij_group_names
-      if @current_user.nil?
-        icij_group_names = []
-        icij_group_names
-      else
-        guardian = Guardian.new(@current_user)
-        group_users = GroupUser.where(user_id: guardian.user.id)
-        group_ids = group_users.pluck(:group_id).uniq
-
-        icij_group_names = Group.icij_groups.where(id: group_ids).pluck(:name)
-
-        icij_group_names
-      end
-    end
-  end
-
-  require_dependency "app/models/category_list"
+  require_dependency "category_list"
   class ::CategoryList
-    attr_accessor :icij_group_names
-
-    def icij_group_names
-      if @guardian.current_user.nil?
-        icij_group_names = []
-        icij_group_names
-      else
-        group_users = GroupUser.where(user_id: @guardian.current_user.id)
-        group_ids = group_users.pluck(:group_id).uniq
-
-        icij_group_names = Group.icij_groups.where(id: group_ids).pluck(:name)
-
-        icij_group_names
-      end
-    end
-
     def find_group(group_name, ensure_can_see: true)
       group = Group
       group = group.find_by("lower(name) = ?", group_name.downcase)
@@ -141,13 +105,25 @@ after_initialize do
     scope :icij_groups, -> { where(icij_group: true) }
   end
 
-  require_dependency "category_list_serializer"
-  class ::CategoryListSerializer
-    attributes :icij_group_names
+  require_dependency "site"
+  class ::Site
+    def icij_group_names
+      if @guardian.current_user.nil?
+        icij_group_names = []
+        icij_group_names
+      else
+        group_users = GroupUser.where(user_id: @guardian.current_user.id)
+        group_ids = group_users.pluck(:group_id).uniq
+
+        icij_group_names = Group.where(icij_group: true).where(id: group_ids).pluck(:name)
+
+        icij_group_names
+      end
+    end
   end
 
-  require_dependency "topic_list_serializer"
-  class ::TopicListSerializer
+  require_dependency "site_serializer"
+  class ::SiteSerializer
     attributes :icij_group_names
   end
 
@@ -176,7 +152,7 @@ after_initialize do
    end
   end
 
-  require_dependency "app/controllers/application_controller"
+  require_dependency "application_controller"
     GroupsController.class_eval do
       def show
         respond_to do |format|

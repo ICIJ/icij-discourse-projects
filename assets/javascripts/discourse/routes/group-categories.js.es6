@@ -47,7 +47,7 @@ const GroupCategoriesRoute = Discourse.Route.extend(OpenComposer, {
           group: result.group,
           categories: CategoryList.categoriesFrom(this.store, result.extras),
           topics: TopicList.topicsFrom(this.store, result.extras),
-          icij_group_names: result.extras.category_list.icij_group_names,
+          icij_group_names: TopicList.icijGroupNamess,
           can_create_category: result.extras.category_list.can_create_category,
           can_create_topic: result.extras.category_list.can_create_topic,
           draft_key: result.extras.category_list.draft_key,

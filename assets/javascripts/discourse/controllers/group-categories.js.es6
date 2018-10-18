@@ -5,4 +5,6 @@ export default Ember.Controller.extend({
   navigationCategory: Ember.inject.controller('navigation/category'),
   application: Ember.inject.controller()
 
+  
+
 });
