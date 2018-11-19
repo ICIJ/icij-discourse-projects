@@ -154,6 +154,100 @@ after_initialize do
 
   require_dependency "application_controller"
     GroupsController.class_eval do
+      def index
+        type_filters_icij = {
+          my: Proc.new { |groups, user|
+            raise Discourse::NotFound unless user
+            Group.member_of(groups, user)
+          },
+          owner: Proc.new { |groups, user|
+            raise Discourse::NotFound unless user
+            Group.owner_of(groups, user)
+          },
+          public: Proc.new { |groups|
+            groups.where(public_admission: true, automatic: false)
+          },
+          close: Proc.new {
+            current_user.groups.where(
+              public_admission: false,
+              automatic: false
+            )
+          },
+          automatic: Proc.new { |groups|
+            groups.where(automatic: true)
+          }
+        }
+
+        unless SiteSetting.enable_group_directory? || current_user&.staff?
+          raise Discourse::InvalidAccess.new(:enable_group_directory)
+        end
+
+        page_size = 30
+        page = params[:page]&.to_i || 0
+        order = %w{name user_count}.delete(params[:order])
+        dir = params[:asc] ? 'ASC' : 'DESC'
+        groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil)
+
+        if (filter = params[:filter]).present?
+          groups = Group.search_groups(filter, groups: groups)
+        end
+
+        type_filters = type_filters_icij.keys
+
+        if username = params[:username]
+          groups = type_filters_icij[:my].call(groups, User.find_by_username(username))
+          type_filters = type_filters - [:my, :owner]
+        end
+
+        unless guardian.is_staff?
+          # hide automatic groups from all non stuff to de-clutter page
+          groups = groups.where("automatic IS FALSE OR groups.id = #{Group::AUTO_GROUPS[:moderators]}")
+          type_filters.delete(:automatic)
+        end
+
+        if Group.preloaded_custom_field_names.present?
+          Group.preload_custom_fields(groups, Group.preloaded_custom_field_names)
+        end
+
+        if type = params[:type]&.to_sym
+          callback = type_filters_icij[type]
+          if !callback
+            raise Discourse::InvalidParameters.new(:type)
+          end
+          groups = callback.call(groups, current_user)
+        end
+
+        if current_user
+          group_users = GroupUser.where(group: groups, user: current_user)
+          user_group_ids = group_users.pluck(:group_id)
+          owner_group_ids = group_users.where(owner: true).pluck(:group_id)
+        else
+          type_filters = type_filters - [:my, :owner]
+        end
+
+        count = groups.count
+        groups = groups.offset(page * page_size).limit(page_size)
+
+        render_json_dump(
+          groups: serialize_data(groups,
+            BasicGroupSerializer,
+            user_group_ids: user_group_ids || [],
+            owner_group_ids: owner_group_ids || []
+          ),
+          extras: {
+            type_filters: type_filters
+          },
+          total_rows_groups: count,
+          load_more_groups: groups_path(
+            page: page + 1,
+            type: type,
+            order: order,
+            asc: params[:asc],
+            filter: filter
+          ),
+        )
+      end
+
       def show
         respond_to do |format|
           group = find_group(:id)
