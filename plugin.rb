@@ -5,6 +5,8 @@
 
 register_asset 'stylesheets/common/select-kit/combo-box.scss'
 register_asset 'stylesheets/common/select-kit/category-chooser'
+# register_asset 'stylesheets/common/base/category_list.scss'
+# register_asset 'stylesheets/desktop/topic-list.scss'
 
 after_initialize do
 
@@ -120,11 +122,26 @@ after_initialize do
         icij_group_names
       end
     end
+
+    def available_icij_groups
+      if @guardian.current_user.nil?
+        icij_group_objects = []
+        icij_group_objects
+      else
+        group_users = GroupUser.where(user_id: @guardian.current_user.id)
+        group_ids = group_users.pluck(:group_id).uniq
+
+        icij_group_objects = (Group.where(icij_group: true).where(id: group_ids)) + Group.where(id: 0)
+
+        icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
+      end
+    end
   end
 
   require_dependency "site_serializer"
   class ::SiteSerializer
-    attributes :icij_group_names
+    attributes :icij_group_names,
+               :available_icij_groups
   end
 
   require_dependency "basic_category_serializer"
@@ -186,7 +203,8 @@ after_initialize do
         page = params[:page]&.to_i || 0
         order = %w{name user_count}.delete(params[:order])
         dir = params[:asc] ? 'ASC' : 'DESC'
-        groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil)
+        groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).icij_groups_get(current_user)
+        # groups = groups.icij_groups_get
 
         if (filter = params[:filter]).present?
           groups = Group.search_groups(filter, groups: groups)
