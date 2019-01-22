@@ -988,8 +988,12 @@ en:
         most_replied_to_users: "Most Replied To"
         no_likes: "No likes yet."
 
+      associated_accounts:
+        title: "Associated Accounts"
+        connect: "Connect"
+        revoke: "Revoke"
+        not_connected: "(not connected)"
 
-      associated_accounts: "Logins"
       ip_address:
         title: "Last IP Address"
       registration_ip_address:

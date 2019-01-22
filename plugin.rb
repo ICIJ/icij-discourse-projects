@@ -3,10 +3,7 @@
 # version: 0.0.1
 # authors: Madeline O'Leary
 
-register_asset 'stylesheets/common/select-kit/combo-box.scss'
 register_asset 'stylesheets/common/select-kit/category-chooser'
-# register_asset 'stylesheets/common/base/category_list.scss'
-# register_asset 'stylesheets/desktop/topic-list.scss'
 
 after_initialize do
 
@@ -123,6 +120,20 @@ after_initialize do
       end
     end
 
+    def icij_projects
+      if @guardian.current_user.nil?
+        icij_projects = []
+        icij_projects
+      else
+        group_users = GroupUser.where(user_id: @guardian.current_user.id)
+        group_ids = group_users.pluck(:group_id).uniq
+
+        icij_projects = Group.where(icij_group: true).where(id: group_ids)
+
+        icij_projects
+      end
+    end
+
     def available_icij_groups
       if @guardian.current_user.nil?
         icij_group_objects = []
@@ -131,7 +142,7 @@ after_initialize do
         group_users = GroupUser.where(user_id: @guardian.current_user.id)
         group_ids = group_users.pluck(:group_id).uniq
 
-        icij_group_objects = (Group.where(icij_group: true).where(id: group_ids)) + Group.where(id: 0)
+        icij_group_objects = (Group.where(icij_group: true).where(id: group_ids))
 
         icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
       end
