@@ -104,6 +104,144 @@ after_initialize do
     scope :icij_groups, -> { where(icij_group: true) }
   end
 
+  require_dependency "lib/search"
+  class ::Search
+    def icij_group_members(user)
+      if user.admin?
+        user_ids = User.all.pluck(:id)
+        user_ids
+      else
+        group_ids = user.groups.where(icij_group: true).pluck(:id) + [0]
+        user_ids = GroupUser.where(group_id: group_ids).pluck(:user_id).uniq
+        user_ids
+      end
+    end
+
+    def posts_query(limit, opts = nil)
+      user_ids = icij_group_members(@guardian.current_user)
+      opts ||= {}
+      posts = Post.where(user_id: user_ids)
+        .where(post_type: Topic.visible_post_types(@guardian.user))
+        .joins(:post_search_data, :topic)
+        .joins("LEFT JOIN categories ON categories.id = topics.category_id")
+        .where("topics.deleted_at" => nil)
+
+      is_topic_search = @search_context.present? && @search_context.is_a?(Topic)
+
+      posts = posts.where("topics.visible") unless is_topic_search
+
+      if opts[:private_messages] || (is_topic_search && @search_context.private_message?)
+        posts = posts.where("topics.archetype =  ?", Archetype.private_message)
+
+         unless @guardian.is_admin?
+           posts = posts.private_posts_for_user(@guardian.user)
+         end
+      else
+        posts = posts.where("topics.archetype <> ?", Archetype.private_message)
+      end
+
+      if @term.present?
+        if is_topic_search
+
+          term_without_quote = @term
+          if @term =~ /"(.+)"/
+            term_without_quote = $1
+          end
+
+          if @term =~ /'(.+)'/
+            term_without_quote = $1
+          end
+
+          posts = posts.joins('JOIN users u ON u.id = posts.user_id')
+          posts = posts.where("posts.raw  || ' ' || u.username || ' ' || COALESCE(u.name, '') ilike ?", "%#{term_without_quote}%")
+        else
+          # A is for title
+          # B is for category
+          # C is for tags
+          # D is for cooked
+          weights = @in_title ? 'A' : (SiteSetting.tagging_enabled ? 'ABCD' : 'ABD')
+          posts = posts.where("post_search_data.search_data @@ #{ts_query(weight_filter: weights)}")
+          exact_terms = @term.scan(/"([^"]+)"/).flatten
+          exact_terms.each do |exact|
+            posts = posts.where("posts.raw ilike :exact OR topics.title ilike :exact", exact: "%#{exact}%")
+          end
+        end
+      end
+
+      @filters.each do |block, match|
+        if block.arity == 1
+          posts = instance_exec(posts, &block) || posts
+        else
+          posts = instance_exec(posts, match, &block) || posts
+        end
+      end if @filters
+
+      # If we have a search context, prioritize those posts first
+      if @search_context.present?
+
+        if @search_context.is_a?(User)
+
+          if opts[:private_messages]
+            posts = posts.private_posts_for_user(@search_context)
+          else
+            posts = posts.where("posts.user_id = #{@search_context.id}")
+          end
+
+        elsif @search_context.is_a?(Category)
+          category_ids = [@search_context.id] + Category.where(parent_category_id: @search_context.id).pluck(:id)
+          posts = posts.where("topics.category_id in (?)", category_ids)
+        elsif @search_context.is_a?(Topic)
+          posts = posts.where("topics.id = #{@search_context.id}")
+            .order("posts.post_number #{@order == :latest ? "DESC" : ""}")
+        end
+
+      end
+
+      if @order == :latest || (@term.blank? && !@order)
+        if opts[:aggregate_search]
+          posts = posts.order("MAX(posts.created_at) DESC")
+        else
+          posts = posts.reorder("posts.created_at DESC")
+        end
+      elsif @order == :latest_topic
+        if opts[:aggregate_search]
+          posts = posts.order("MAX(topics.created_at) DESC")
+        else
+          posts = posts.order("topics.created_at DESC")
+        end
+      elsif @order == :views
+        if opts[:aggregate_search]
+          posts = posts.order("MAX(topics.views) DESC")
+        else
+          posts = posts.order("topics.views DESC")
+        end
+      elsif @order == :likes
+        if opts[:aggregate_search]
+          posts = posts.order("MAX(posts.like_count) DESC")
+        else
+          posts = posts.order("posts.like_count DESC")
+        end
+      else
+        data_ranking = "TS_RANK_CD(post_search_data.search_data, #{ts_query})"
+        if opts[:aggregate_search]
+          posts = posts.order("MAX(#{data_ranking}) DESC")
+        else
+          posts = posts.order("#{data_ranking} DESC")
+        end
+        posts = posts.order("topics.bumped_at DESC")
+      end
+
+      if secure_category_ids.present?
+        posts = posts.where("(categories.id IS NULL) OR (NOT categories.read_restricted) OR (categories.id IN (?))", secure_category_ids).references(:categories)
+      else
+        posts = posts.where("(categories.id IS NULL) OR (NOT categories.read_restricted)").references(:categories)
+      end
+
+      posts = posts.offset(offset)
+      posts.limit(limit)
+    end
+  end
+
   require_dependency "site"
   class ::Site
     def icij_group_names
@@ -147,12 +285,27 @@ after_initialize do
         icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
       end
     end
+
+    def icij_groups_and_everyone
+      if @guardian.current_user.nil?
+        icij_group_objects = []
+        icij_group_objects
+      else
+        group_users = GroupUser.where(user_id: @guardian.current_user.id)
+        group_ids = group_users.pluck(:group_id).uniq
+
+        icij_group_objects = (Group.where(icij_group: true).where(id: group_ids)) + Group.where(id: 0)
+
+        icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
+      end
+    end
   end
 
   require_dependency "site_serializer"
   class ::SiteSerializer
     attributes :icij_group_names,
-               :available_icij_groups
+               :available_icij_groups,
+               :icij_groups_and_everyone
   end
 
   require_dependency "basic_category_serializer"

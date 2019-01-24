@@ -76,7 +76,7 @@ const GroupCategoriesRoute = Discourse.Route.extend(OpenComposer, {
     },
 
     createCategory() {
-      const groups = this.site.available_icij_groups,
+      const groups = this.site.icij_groups_and_everyone,
         everyoneName = groups.findBy("id", 0).name;
 
       const model = this.store.createRecord("category", {
