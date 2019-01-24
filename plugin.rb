@@ -368,7 +368,6 @@ after_initialize do
         order = %w{name user_count}.delete(params[:order])
         dir = params[:asc] ? 'ASC' : 'DESC'
         groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).icij_groups_get(current_user)
-        # groups = groups.icij_groups_get
 
         if (filter = params[:filter]).present?
           groups = Group.search_groups(filter, groups: groups)
@@ -505,4 +504,5 @@ after_initialize do
         get 'categories'
       end
     end
+
 end
