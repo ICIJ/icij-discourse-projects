@@ -9,7 +9,7 @@ const { get, isNone, isEmpty } = Ember;
 
 export default ComboBoxComponent.extend({
   pluginApiIdentifiers: ["category-chooser"],
-  classNames: "project-category-chooser",
+  classNames: "category-chooser",
   filterable: true,
   castInteger: true,
   allowUncategorized: false,

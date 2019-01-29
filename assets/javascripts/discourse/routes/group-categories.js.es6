@@ -7,9 +7,6 @@ import { ajax } from "discourse/lib/ajax";
 import PreloadStore from "preload-store";
 
 const GroupCategoriesRoute = Discourse.Route.extend(OpenComposer, {
-  //   const groupName = this.modelFor('group').get('name');
-  //   return ajax(`/groups/${groupName}/categories.json`);
-
   renderTemplate: function() {
     this.render('group-categories', {into: 'application'});
   },

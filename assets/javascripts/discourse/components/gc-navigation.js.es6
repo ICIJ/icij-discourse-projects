@@ -20,6 +20,11 @@ export default Ember.Component.extend({
     return hasDraft ? 'topic.open_draft': 'topic.create';
   },
 
+  @computed()
+  createCategoryLabel() {
+    return "category.create";
+  },
+
   @computed('category.can_edit')
   showCategoryEdit: canEdit => canEdit,
 

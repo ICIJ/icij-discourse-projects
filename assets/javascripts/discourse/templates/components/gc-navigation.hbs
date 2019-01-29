@@ -1,6 +1,7 @@
-{{categories-admin-dropdown
-  create=(route-action "createCategory")
-  reorder=reorderCategories}}
+{{create-category-button
+  action=(route-action "createCategory")
+  label=createCategoryLabel
+}}
 
 {{create-topic-button
   canCreateTopic=canCreateTopic

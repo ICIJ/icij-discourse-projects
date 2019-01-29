@@ -10,6 +10,11 @@ export default {
       @property()
       projects() {
         return this.site.get("available_icij_groups");
+      },
+
+      @property()
+      createCategoryLabel() {
+        return "category.create";
       }
 
     });

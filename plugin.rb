@@ -104,7 +104,7 @@ after_initialize do
     scope :icij_groups, -> { where(icij_group: true) }
   end
 
-  require_dependency "lib/search"
+  require_dependency "search"
   class ::Search
     def icij_group_members(user)
       if user.admin?
