@@ -102,6 +102,28 @@ after_initialize do
     }
 
     scope :icij_groups, -> { where(icij_group: true) }
+
+    def posts_for(guardian, opts = nil)
+      opts ||= {}
+      category_ids = categories.pluck(:id)
+      topic_ids = Topic.where(category_id: category_ids).pluck(:id)
+      result = Post.joins(:topic, user: :groups, topic: :category)
+        .preload(:topic, user: :groups, topic: :category)
+        .references(:posts, :topics, :category)
+        .where(groups: { id: id })
+        .where('topics.archetype <> ?', Archetype.private_message)
+        .where('topics.visible')
+        .where(post_type: Post.types[:regular])
+        .where(topic_id: topic_ids)
+
+      if opts[:category_id].present?
+        result = result.where('topics.category_id = ?', opts[:category_id].to_i)
+      end
+
+      result = guardian.filter_allowed_categories(result)
+      result = result.where('posts.id < ?', opts[:before_post_id].to_i) if opts[:before_post_id]
+      result.order('posts.created_at desc')
+    end
   end
 
   require_dependency "search"
