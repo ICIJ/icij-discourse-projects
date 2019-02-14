@@ -86,8 +86,8 @@ const GroupCategoriesRoute = Discourse.Route.extend(OpenComposer, {
         custom_fields: {}
       });
 
-      showModal("edit-icij-category", { model });
-      this.controllerFor("edit-icij-category").set("selectedTab", "general");
+      showModal("edit-category", { model });
+      this.controllerFor("edit-category").set("selectedTab", "general");
     }
   }
 });

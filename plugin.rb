@@ -93,7 +93,7 @@ after_initialize do
   require_dependency "app/models/concerns/anon_cache_invalidator"
   require_dependency "lib/validators/url_validator"
   require_dependency "app/models/group"
-  class ::Group < ::ActiveRecord::Base
+  class ::Group
     scope :icij_groups_get, Proc.new { |user|
       group_users = GroupUser.where(user_id: user.id)
       group_ids = group_users.pluck(:group_id).uniq
@@ -123,6 +123,70 @@ after_initialize do
       result = guardian.filter_allowed_categories(result)
       result = result.where('posts.id < ?', opts[:before_post_id].to_i) if opts[:before_post_id]
       result.order('posts.created_at desc')
+    end
+  end
+
+  require_dependency "topic_query"
+  class ::TopicQuery
+    def list_group_topics(group)
+      list = default_results.where("
+        topics.user_id IN (
+          SELECT user_id FROM group_users gu WHERE gu.group_id = #{group.id.to_i}
+        )
+      ")
+
+      category_ids = (group.categories.empty? ? [] : group.categories.pluck(:id))
+
+      params = { filtered: true, category_ids: category_ids }
+
+      create_list(:group_topics, params, list)
+    end
+
+
+    def create_list(filter, options = {}, topics = nil)
+      topics ||= default_results(options)
+      topics = yield(topics) if block_given?
+
+      options = options.merge(@options)
+      if ["activity", "default"].include?(options[:order] || "activity") &&
+          !options[:unordered] &&
+          filter != :private_messages
+        topics = prioritize_pinned_topics(topics, options)
+      end
+
+      if options[:filtered] && options[:category_ids]
+        filter_by = options[:category_ids]
+        return_filtered = filter_by.empty? ? [] : topics.reject { |topic| !filter_by.include?(topic.category_id) }
+        topics = return_filtered
+        topics
+      end
+
+      topics = topics.to_a
+
+      if options[:preload_posters]
+        user_ids = []
+        topics.each do |ft|
+          user_ids << ft.user_id << ft.last_post_user_id << ft.featured_user_ids << ft.allowed_user_ids
+        end
+
+        avatar_lookup = AvatarLookup.new(user_ids)
+        primary_group_lookup = PrimaryGroupLookup.new(user_ids)
+
+        topics.each do |t|
+          t.posters = t.posters_summary(
+            avatar_lookup: avatar_lookup,
+            primary_group_lookup: primary_group_lookup
+          )
+        end
+      end
+
+      topics.each do |t|
+        t.allowed_user_ids = filter == :private_messages ? t.allowed_users.map { |u| u.id } : []
+      end
+
+      list = TopicList.new(filter, @user, topics, options.merge(@options))
+      list.per_page = options[:per_page] || per_page_setting
+      list
     end
   end
 
