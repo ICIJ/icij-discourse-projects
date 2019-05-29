@@ -10,6 +10,12 @@
   {{/if}}
 
   <li>
+    {{#link-to "group.categories" }}
+      Groups
+    {{/link-to}}
+  </li>
+
+  <li>
     {{#link-to "group" }}
       {{d-icon 'users'}} Members ({{group.group.user_count}})
     {{/link-to}}

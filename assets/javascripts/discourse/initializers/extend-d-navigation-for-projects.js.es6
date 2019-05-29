@@ -9,7 +9,7 @@ export default {
 
       @property()
       projects() {
-        return this.site.get("available_icij_groups");
+        return this.site.get("available_icij_projects");
       },
 
       @property()

@@ -548,7 +548,7 @@ en:
       "14": "Pending"
 
     categories:
-      all: "All Groups"
+      all: "all groups"
       all_subcategories: "all in %{categoryName}"
       no_subcategory: "none"
       category: "Group"

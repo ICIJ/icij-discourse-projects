@@ -5,6 +5,6 @@ export default Ember.Component.extend({
 
   @computed()
   icijGroupNames() {
-    return this.site.get('icij_group_names') || this.site.get('icij_project_names') || [];
+    return this.site.get('icij_project_names');
   }
 });

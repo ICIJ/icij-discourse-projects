@@ -94,14 +94,18 @@ after_initialize do
   require_dependency "lib/validators/url_validator"
   require_dependency "app/models/group"
   class ::Group
-    scope :icij_groups_get, Proc.new { |user|
-      group_users = GroupUser.where(user_id: user.id)
-      group_ids = group_users.pluck(:group_id).uniq
-      icij_groups = Group.icij_groups.where(id: group_ids)
-      icij_groups
+    scope :icij_projects_get, Proc.new { |user|
+
+      if user.nil?
+        []
+      else
+        group_users = GroupUser.where(user_id: user.id)
+        group_ids = group_users.pluck(:group_id).uniq
+        Group.icij_projects.where(id: group_ids)
+      end
     }
 
-    scope :icij_groups, -> { where(icij_group: true) }
+    scope :icij_projects, -> { where(icij_group: true) }
 
     def posts_for(guardian, opts = nil)
       opts ||= {}
@@ -328,70 +332,50 @@ after_initialize do
     end
   end
 
+  require_dependency "app/models/group"
   require_dependency "site"
   class ::Site
-    def icij_group_names
-      if @guardian.current_user.nil?
-        icij_group_names = []
-        icij_group_names
-      else
-        group_users = GroupUser.where(user_id: @guardian.current_user.id)
-        group_ids = group_users.pluck(:group_id).uniq
-
-        icij_group_names = Group.where(icij_group: true).where(id: group_ids).pluck(:name)
-
-        icij_group_names
-      end
-    end
-
     def icij_projects
-      if @guardian.current_user.nil?
-        icij_projects = []
-        icij_projects
+      if @guardian.nil?
+        user = current_user
       else
-        group_users = GroupUser.where(user_id: @guardian.current_user.id)
-        group_ids = group_users.pluck(:group_id).uniq
+        user = @guardian.current_user
+      end
 
-        icij_projects = Group.where(icij_group: true).where(id: group_ids)
+      Group.icij_projects_get(user)
+    end
 
-        icij_projects
+    def icij_project_names
+      self.icij_projects.pluck(:name)
+    end
+
+    def fellow_icij_project_members
+      if @guardian.current_user.nil?
+        []
+      else
+        groups = @guardian.current_user.groups.reject { |group| !group.icij_group? }.pluck(:id)
+        group_users = GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
+
+        group_users
       end
     end
 
-    def available_icij_groups
-      if @guardian.current_user.nil?
-        icij_group_objects = []
-        icij_group_objects
-      else
-        group_users = GroupUser.where(user_id: @guardian.current_user.id)
-        group_ids = group_users.pluck(:group_id).uniq
-
-        icij_group_objects = (Group.where(icij_group: true).where(id: group_ids))
-
-        icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
-      end
+    def available_icij_projects
+      self.icij_projects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
     end
 
-    def icij_groups_and_everyone
-      if @guardian.current_user.nil?
-        icij_group_objects = []
-        icij_group_objects
-      else
-        group_users = GroupUser.where(user_id: @guardian.current_user.id)
-        group_ids = group_users.pluck(:group_id).uniq
-
-        icij_group_objects = (Group.where(icij_group: true).where(id: group_ids)) + Group.where(id: 0)
-
-        icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
-      end
+    def icij_projects_and_everyone
+      icij_group_objects = self.icij_projects + Group.where(id: 0)
+      icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
     end
   end
 
   require_dependency "site_serializer"
   class ::SiteSerializer
-    attributes :icij_group_names,
-               :available_icij_groups,
-               :icij_groups_and_everyone
+    attributes :icij_project_names,
+               :available_icij_projects,
+               :icij_projects_and_everyone,
+               :fellow_icij_project_members
   end
 
   require_dependency "basic_category_serializer"
@@ -453,7 +437,7 @@ after_initialize do
         page = params[:page]&.to_i || 0
         order = %w{name user_count}.delete(params[:order])
         dir = params[:asc] ? 'ASC' : 'DESC'
-        groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).icij_groups_get(current_user)
+        groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).icij_projects_get(current_user)
 
         if (filter = params[:filter]).present?
           groups = Group.search_groups(filter, groups: groups)
@@ -527,7 +511,7 @@ after_initialize do
 
           format.json do
             groups = Group.visible_groups(current_user)
-            icij_groups = Group.icij_groups_get(current_user)
+            icij_groups = Group.icij_projects_get(current_user)
 
             if !guardian.is_staff?
               groups = groups.where(automatic: false)
@@ -590,5 +574,4 @@ after_initialize do
         get 'categories'
       end
     end
-
 end

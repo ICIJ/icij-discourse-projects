@@ -8,4 +8,5 @@ export default Ember.Component.extend({
   classNameBindings: ["hidden:hidden", ":category-breadcrumb"],
   tagName: "ol",
   parentCategory: Em.computed.alias("category.parentCategory"),
+
 });

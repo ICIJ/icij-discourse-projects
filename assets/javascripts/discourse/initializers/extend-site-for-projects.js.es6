@@ -9,7 +9,7 @@ export default {
 
       @property()
       projectsList() {
-        this.get("available_icij_groups");
+        this.get("available_icij_projects");
       }
 
     });
