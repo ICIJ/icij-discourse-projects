@@ -11,12 +11,10 @@ export default ComboBoxComponent.extend({
   caretUpIcon: "caret-down",
   allowAutoSelectFirst: false,
   valueAttribute: 'name',
-
   @computed("content")
   filterable(content) {
     return content && content.length >= 10;
   },
-
   computeHeaderContent() {
     let content = this._super();
 
@@ -26,7 +24,6 @@ export default ComboBoxComponent.extend({
 
     return content;
   },
-
   @computed
   collectionHeader() {
     if (this.siteSettings.enable_group_directory ||
@@ -39,7 +36,6 @@ export default ComboBoxComponent.extend({
       `.htmlSafe();
     }
   },
-
   actions: {
     onSelect(groupName) {
       DiscourseURL.routeTo(Discourse.getURL(`/groups/${groupName}/categories`));
