@@ -9,12 +9,6 @@
     {{group-dropdown content=group.extras.icij_group_names value=group.name}}
   {{/if}}
 
-  <li>
-    {{#link-to "group.categories" }}
-      Groups
-    {{/link-to}}
-  </li>
-
   {{#each tabs as |tab|}}
     <li>
       {{#link-to tab.route group title=tab.message class=tab.name}}

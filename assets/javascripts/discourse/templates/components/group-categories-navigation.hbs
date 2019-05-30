@@ -10,14 +10,14 @@
   {{/if}}
 
   <li>
-    {{#link-to "group.categories" }}
-      Groups
+    {{#link-to "group" class='ember-view' }}
+      {{d-icon 'users'}} Members ({{group.group.user_count}})
     {{/link-to}}
   </li>
 
   <li>
-    {{#link-to "group.members" }}
-      {{d-icon 'users'}} Members({{group.group.user_count}})
+    {{#link-to "group.categories" class='active' }}
+      Groups
     {{/link-to}}
   </li>
 
