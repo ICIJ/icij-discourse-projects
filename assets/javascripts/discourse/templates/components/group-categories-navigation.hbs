@@ -9,36 +9,13 @@
     {{group-categories-dropdown content=icijGroupNames value=group.group.name}}
   {{/if}}
 
-  <li>
-    {{#link-to "group" class='ember-view' }}
-      {{d-icon 'users'}} Members ({{group.group.user_count}})
-    {{/link-to}}
-  </li>
-
-  <li>
-    {{#link-to "group.categories" class='active' }}
-      Groups
-    {{/link-to}}
-  </li>
-
-  <li>
-    {{#link-to "group.activity" }}
-      Activity
-    {{/link-to}}
-  </li>
-
-  <li>
-    {{#link-to "group.messages" }}
-      Messages
-    {{/link-to}}
-  </li>
-
-  {{#if currentUser.admin}}
+  {{#each tabs as |tab|}}
     <li>
-      {{#link-to "group.manage" }}
-        {{d-icon 'wrench'}} Manage
+      {{#link-to tab.route class=tab.name}}
+        {{#if tab.icon}}{{d-icon tab.icon}}{{/if}}
+        {{tab.message}}
+        {{#if tab.count}}<span class='count'>({{tab.count}})</span>{{/if}}
       {{/link-to}}
     </li>
-  {{/if}}
-
+  {{/each}}
 {{/mobile-nav}}

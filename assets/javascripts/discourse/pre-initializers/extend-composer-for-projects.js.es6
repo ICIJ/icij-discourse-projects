@@ -5,9 +5,7 @@ export default {
   name: 'extend-category-for-projects',
   before: 'inject-discourse-objects',
   initialize() {
-
     Composer.reopen({
-
       @property("privateMessage", "archetype.hasOptions")
       showUnfilteredCategoryChooser(isPrivateMessage, hasOptions) {
         const manyCategories = this.site.get('categories').length > 1;
@@ -25,7 +23,6 @@ export default {
 
         return !isPrivateMessage && (hasOptions || manyCategories) && onProjectPage;
       }
-
     });
   }
 };
