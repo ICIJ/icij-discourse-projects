@@ -18,7 +18,7 @@ export default Ember.Controller.extend({
   showing: "members",
   destroying: null,
 
-  @computed("showMessages", "model.user_count", "canManageGroup")
+  @computed("showMessages", "model.group.user_count", "canManageGroup")
   icijTabs(showMessages, userCount, canManageGroup, icijGroups) {
     const icijMembersTab = Tab.create({
       name: "border-bottom-0",
@@ -56,12 +56,10 @@ export default Ember.Controller.extend({
       );
     }
 
-    console.log(defaultTabs);
-
     return defaultTabs;
   },
 
-  @computed("model.is_group_user")
+  @computed("model.group.is_group_user")
   showMessages(isGroupUser) {
     if (!this.siteSettings.enable_personal_messages) {
       return false;
@@ -70,7 +68,7 @@ export default Ember.Controller.extend({
     return isGroupUser || (this.currentUser && this.currentUser.admin);
   },
 
-  @computed("model.is_group_owner", "model.automatic")
+  @computed("model.group.is_group_owner", "model.group.automatic")
   canEditGroup(isGroupOwner, automatic) {
     return !automatic && isGroupOwner;
   },
@@ -90,7 +88,7 @@ export default Ember.Controller.extend({
     };
   },
 
-  @computed("model.messageable")
+  @computed("model.group.messageable")
   displayGroupMessageButton(messageable) {
     return this.currentUser && messageable;
   },
@@ -106,11 +104,11 @@ export default Ember.Controller.extend({
 
   actions: {
     messageGroup() {
-      this.send("createNewMessageViaParams", this.get("model.name"));
+      this.send("createNewMessageViaParams", this.get("model.group.name"));
     },
 
     destroy() {
-      const group = this.get("model");
+      const group = this.get("model.group");
       this.set("destroying", true);
 
       bootbox.confirm(
