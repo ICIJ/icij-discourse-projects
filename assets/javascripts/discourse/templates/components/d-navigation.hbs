@@ -1,12 +1,11 @@
 {{bread-crumbs-projects projects=projects}}
 {{bread-crumbs categories=categories category=category noSubcategories=noSubcategories}}
 
-{{#if showCategoryAdmin}}
   {{create-category-button
     action=(route-action "createCategory")
     label=createCategoryLabel
   }}
-{{/if}}
+
 
 {{navigation-bar navItems=navItems filterMode=filterMode category=category}}
 
