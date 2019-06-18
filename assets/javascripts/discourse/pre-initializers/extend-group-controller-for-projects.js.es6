@@ -54,8 +54,6 @@ export default {
           );
         }
 
-        console.log(defaultTabs);
-
         return defaultTabs;
       }
     })
