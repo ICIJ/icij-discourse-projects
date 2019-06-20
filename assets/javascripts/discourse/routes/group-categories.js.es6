@@ -73,13 +73,12 @@ const GroupCategoriesRoute = Discourse.Route.extend(OpenComposer, {
     },
 
     createCategory() {
-      const groups = this.site.icij_projects_and_everyone,
-        nameToUse = this.modelFor('group').get('name')
-
+      const groups = this.site.icij_projects_for_security
+      
       const model = this.store.createRecord("category", {
         color: "0088CC",
         text_color: "FFFFFF",
-        group_permissions: [{ group_name: nameToUse, permission_type: 1 }],
+        group_permissions: [{ group_name: this.modelFor('group').get('name'), permission_type: 1 }],
         available_groups: groups.map(g => g.name),
         allow_badges: true,
         topic_featured_link_allowed: true,

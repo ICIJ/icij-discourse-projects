@@ -364,8 +364,8 @@ after_initialize do
       self.icij_projects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
     end
 
-    def icij_projects_and_everyone
-      icij_group_objects = self.icij_projects + Group.where(id: 0)
+    def icij_projects_for_security
+      icij_group_objects = self.icij_projects
       icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
     end
   end
@@ -374,7 +374,7 @@ after_initialize do
   class ::SiteSerializer
     attributes :icij_project_names,
                :available_icij_projects,
-               :icij_projects_and_everyone,
+               :icij_projects_for_security,
                :fellow_icij_project_members
   end
 
