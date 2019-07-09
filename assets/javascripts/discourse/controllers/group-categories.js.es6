@@ -21,9 +21,8 @@ export default Ember.Controller.extend({
   @computed("showMessages", "model.group.user_count", "canManageGroup")
   icijTabs(showMessages, userCount, canManageGroup, icijGroups) {
     const icijMembersTab = Tab.create({
-      name: "border-bottom-0",
-      route: "group",
-      icon: "users",
+      route: "group.index",
+      icon: "users.members",
       i18nKey: "members.title"
     });
 

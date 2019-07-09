@@ -19,8 +19,8 @@ export default {
       @computed("showMessages", "model.user_count", "canManageGroup")
       icijTabs(showMessages, userCount, canManageGroup, icijGroups) {
         const icijMembersTab = Tab.create({
-          name: "border-bottom-0",
-          route: "group",
+          name: "members",
+          route: "group.index",
           icon: "users",
           i18nKey: "members.title"
         });
