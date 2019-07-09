@@ -404,6 +404,39 @@ after_initialize do
   end
 
   require_dependency "application_controller"
+  require_dependency "categories_controller"
+    CategoriesController.class_eval do
+      def create
+        guardian.ensure_can_create!(Category)
+        position = category_params.delete(:position)
+
+        @category =
+          begin
+            Category.new(category_params.merge(user: current_user))
+          rescue ArgumentError => e
+            return render json: { errors: [e.message] }, status: 422
+          end
+
+        if params[:permissions].nil?
+          @category.errors[:base] << "Please assign a project to this group."
+          return render_json_error(@category)
+        end
+
+        if @category.save
+          @category.move_to(position.to_i) if position
+
+          Scheduler::Defer.later "Log staff action create category" do
+            @staff_action_logger.log_category_creation(@category)
+          end
+
+          render_serialized(@category, CategorySerializer)
+        else
+          return render_json_error(@category) unless @category.save
+        end
+      end
+    end
+
+  require_dependency "application_controller"
     GroupsController.class_eval do
       def index
         type_filters_icij = {
