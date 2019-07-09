@@ -375,7 +375,15 @@ after_initialize do
     attributes :icij_project_names,
                :available_icij_projects,
                :icij_projects_for_security,
-               :fellow_icij_project_members
+               :fellow_icij_project_members,
+               :icij_project_categories
+
+    def icij_project_categories
+       user = scope && scope.user
+       group_ids = Group.icij_projects_get(user).pluck(:id)
+       category_ids = CategoryGroup.where(group_id: group_ids).pluck(:category_id)
+       (Category.where(id: category_ids).pluck(:id))
+    end
   end
 
   require_dependency "basic_category_serializer"
