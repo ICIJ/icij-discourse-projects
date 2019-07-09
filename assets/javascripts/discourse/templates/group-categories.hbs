@@ -1,3 +1,14 @@
+<div class="container group {{model.group.name}}">
+  <div class="group-details-container">
+    {{#if model.group.bio_cooked}}
+      <hr>
+
+      <div class='group-bio'>
+        <p>{{{model.group.bio_cooked}}}</p>
+      </div>
+    {{/if}}
+  </div>
+
   <div class="list-controls">
     <div class="container">
       {{group-categories-navigation group=model currentPath=application.currentPath tabs=icijTabs}}
@@ -11,14 +22,15 @@
     </div>
   </div>
 
-<div class='clear'></div>
+  <div class='clear'></div>
 
-<div class="categories-and-latest">
-  <div class='column categories'>
-    {{categories-only categories=model.categories}}
-  </div>
+  <div class="categories-and-latest">
+    <div class='column categories'>
+      {{categories-only categories=model.categories}}
+    </div>
 
-  <div class='column'>
-    {{categories-topic-list topics=model.topics filter="latest" class="latest-topic-list"}}
+    <div class='column'>
+      {{categories-topic-list topics=model.topics filter="latest" class="latest-topic-list"}}
+    </div>
   </div>
 </div>
