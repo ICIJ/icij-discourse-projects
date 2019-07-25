@@ -101,6 +101,13 @@ export default Ember.Controller.extend({
     );
   },
 
+  @computed
+  isGroupCategoriesRoute()  {
+    const container = Discourse.__container__;
+    const route = container.lookup("route:application");
+    return (route.controller.currentRouteName.indexOf('group.') === 0);
+  },
+
   actions: {
     messageGroup() {
       this.send("createNewMessageViaParams", this.get("model.group.name"));
