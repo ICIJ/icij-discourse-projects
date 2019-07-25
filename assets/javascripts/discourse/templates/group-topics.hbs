@@ -1,0 +1,46 @@
+<div class="list-controls">
+  <div class="container">
+    {{group-categories-navigation group=model currentPath=application.currentPath tabs=icijTabs}}
+
+    {{gc-navigation
+      canCreateTopic=canCreateTopic
+      createTopic=(route-action "createTopic")
+      createTopicDisabled=cannotCreateTopicOnCategory
+      hasDraft=draft
+      editCategory=(route-action "editCategory" category)}}
+  </div>
+</div>
+
+<div class="container group">
+  {{#discovery-topics-list model=model refresh="refresh" incomingCount=topicTrackingState.incomingCount}}
+    {{#if topicTrackingState.hasIncoming}}
+      <div class="show-more {{if hasTopics 'has-topics'}}">
+        <div class='alert alert-info clickable' {{action "showInserted"}}>
+          <a tabindex="0" href="" {{action "showInserted"}}>
+            {{count-i18n key="topic_count_" suffix=topicTrackingState.filter count=topicTrackingState.incomingCount}}
+          </a>
+        </div>
+      </div>
+    {{/if}}
+
+    {{topic-list
+      highlightLastVisited=true
+      top=top
+      showTopicPostBadges=showTopicPostBadges
+      showPosters=true
+      canBulkSelect=canBulkSelect
+      changeSort="changeSort"
+      toggleBulkSelect="toggleBulkSelect"
+      hideCategory=model.hideCategory
+      order=order
+      ascending=ascending
+      bulkSelectEnabled=bulkSelectEnabled
+      selected=selected
+      expandGloballyPinned=expandGloballyPinned
+      expandAllPinned=expandAllPinned
+      category=category
+      topics=model.topics
+      discoveryList=true}}
+
+  {{/discovery-topics-list}}
+</div>
