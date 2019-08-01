@@ -409,6 +409,19 @@ after_initialize do
   end
 
   require_dependency "application_controller"
+  require_dependency "list_controller"
+  require_dependency 'topic_list_responder'
+  require_dependency 'topic_query'
+  require_dependency 'icij_topic_query'
+    ListController.class_eval do
+      private
+
+      def generate_list_for(action, target_user, opts)
+        action == "group_topics" ? IcijTopicQuery.new(current_user, opts).send("list_icij_group_topics", target_user) : TopicQuery.new(current_user, opts).send("list_#{action}", target_user)
+      end
+    end
+
+  require_dependency "application_controller"
   require_dependency "categories_controller"
     CategoriesController.class_eval do
       def create
