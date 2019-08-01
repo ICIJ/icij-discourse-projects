@@ -617,35 +617,12 @@ after_initialize do
           extras: serialize_data(result, CategoryAndTopicListsSerializer, root: false)
         )
       end
-
-      def topics
-        group = find_group(:group_id)
-
-        categories = group.categories.all
-        category_ids = categories.pluck(:id)
-        ids_to_exclude = Category.where.not(id: category_ids).pluck(:id)
-
-        topic_options = {
-          order: 'created',
-          no_definitions: true,
-          exclude_category_ids: ids_to_exclude
-        }
-
-        @topic_list = TopicQuery.new(current_user, topic_options).list_latest
-        @topic_list.more_topics_url = url_for(public_send("latest_path"))
-
-        render_serialized(@topic_list, TopicListSerializer)
-      end
     end
 
     require_dependency 'application_controller'
     Discourse::Application.routes.append do
       resources :groups, id: RouteFormat.username do
         get 'categories'
-      end
-
-      resources :groups, id: RouteFormat.username do
-        get 'topics'
       end
     end
 end
