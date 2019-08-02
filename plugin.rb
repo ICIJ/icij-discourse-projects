@@ -137,7 +137,6 @@ after_initialize do
       ")
 
       category_ids = (group.categories.empty? ? [] : group.categories.pluck(:id))
-
       params = { filtered: true, category_ids: category_ids }
 
       create_list(:group_topics, params, list)
