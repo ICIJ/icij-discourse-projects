@@ -366,6 +366,15 @@ after_initialize do
     end
   end
 
+  require_dependency "category_serializer"
+  class ::CategorySerializer
+    def available_groups
+      user = scope && scope.user
+      groups = Group.order(:name).icij_projects_get(user)
+      groups.pluck(:name) - group_permissions.map { |g| g[:group_name] }
+    end
+  end
+
   require_dependency "site_serializer"
   class ::SiteSerializer
     attributes :icij_project_names,
