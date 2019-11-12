@@ -91,19 +91,20 @@ after_initialize do
   require_dependency "lib/validators/url_validator"
   require_dependency "app/models/group"
   class ::Group
-    scope :icij_projects_get, Proc.new { |user|
+    # this gathers all groups with icic_group: true, which means they were imported as projects by xemx
+    scope :icij_projects, -> { where(icij_group: true) }
 
+    # this gathers all the icij projects accessible to the current user
+    scope :icij_projects_get, Proc.new { |user|
       if user.nil?
         []
       else
-        group_users = GroupUser.where(user_id: user.id)
-        group_ids = group_users.pluck(:group_id).uniq
-        Group.icij_projects.where(id: group_ids)
+        group_ids = user.groups.reject { |group| !group.icij_group? }.pluck(:id)
+        Group.where(id: group_ids)
       end
     }
 
-    scope :icij_projects, -> { where(icij_group: true) }
-
+    # gets all the posts for a particular group -- used on the group activity tab
     def posts_for(guardian, opts = nil)
       opts ||= {}
       category_ids = categories.pluck(:id)
@@ -329,40 +330,48 @@ after_initialize do
   end
 
   require_dependency "app/models/group"
+  require_dependency "app/models/category"
   require_dependency "site"
   class ::Site
-    def icij_projects
+    # groups the project names in a simple array for easy use in later manipulations
+    def icij_project_names
+      user = self.determine_user
+      Group.icij_projects_get(user).pluck(:name)
+    end
+
+    def determine_user
       if @guardian.nil?
         user = current_user
+      elsif @guardian.current_user.nil?
+        user = nil
       else
         user = @guardian.current_user
       end
-
-      Group.icij_projects_get(user)
-    end
-
-    def icij_project_names
-      self.icij_projects.pluck(:name)
     end
 
     def fellow_icij_project_members
-      if @guardian.current_user.nil?
+      user = self.determine_user
+      if user.nil?
         []
       else
-        groups = @guardian.current_user.groups.reject { |group| !group.icij_group? }.pluck(:id)
-        group_users = GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
-
-        group_users
+        groups = Group.icij_projects_get(user).pluck(:id)
+        GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
       end
     end
 
+    # maps the projects available to the current user in a simple obejct available for assigning group permissions
     def available_icij_projects
-      self.icij_projects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
+      user = self.determine_user
+      Group.icij_projects_get(user).pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
     end
 
-    def icij_projects_for_security
-      icij_group_objects = self.icij_projects
-      icij_group_objects.pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
+    # all the categories for icij projects (use for filtering)
+    def icij_project_categories
+      user = self.determine_user
+
+      group_ids = Group.icij_projects_get(user).pluck(:id)
+      category_ids = CategoryGroup.where(group_id: group_ids).pluck(:category_id)
+      (Category.where(id: category_ids).pluck(:id))
     end
   end
 
@@ -379,16 +388,9 @@ after_initialize do
   class ::SiteSerializer
     attributes :icij_project_names,
                :available_icij_projects,
-               :icij_projects_for_security,
                :fellow_icij_project_members,
                :icij_project_categories
 
-    def icij_project_categories
-       user = scope && scope.user
-       group_ids = Group.icij_projects_get(user).pluck(:id)
-       category_ids = CategoryGroup.where(group_id: group_ids).pluck(:category_id)
-       (Category.where(id: category_ids).pluck(:id))
-    end
   end
 
   require_dependency "basic_category_serializer"
