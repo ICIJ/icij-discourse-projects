@@ -73,7 +73,7 @@ const GroupCategoriesRoute = Discourse.Route.extend(OpenComposer, {
     },
 
     createCategory() {
-      const groups = this.site.icij_projects_for_security
+      const groups = this.site.available_icij_projects
 
       const model = this.store.createRecord("category", {
         color: "0088CC",
