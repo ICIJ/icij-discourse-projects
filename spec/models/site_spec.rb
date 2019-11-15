@@ -120,8 +120,120 @@ describe Site do
   end
 
   describe '#available_icij_projects' do
+    it "should return a json containing the id and name of a user's icij project groups" do
+      user = Fabricate(:user)
+      site = Site.new(Guardian.new(user))
 
+      icij_group = Fabricate(:icij_group)
+      icij_group.add(user)
+
+      result = [{"id"=>icij_group.id, "name"=>icij_group.name}]
+
+      expect(site.available_icij_projects).to eq(result)
+    end
+
+    it 'should not return a json object containing the names of groups to which the user is not a member' do
+      user = Fabricate(:user)
+      site = Site.new(Guardian.new(user))
+
+      icij_group = Fabricate(:icij_group)
+      another_group = Fabricate(:icij_group)
+      icij_group.add(user)
+
+      result = [{"id"=>icij_group.id, "name"=>icij_group.name}]
+
+      expect(site.available_icij_projects).to eq(result)
+    end
+
+    # when user is not a member of any projects
+    it 'returns empty array when user is not a member of any icij project groups' do
+      user = Fabricate(:user)
+      site = Site.new(Guardian.new(user))
+
+      icij_group = Fabricate(:icij_group)
+
+      expect(site.available_icij_projects).to eq([])
+    end
+
+    # when user is nil
+    it 'returns an empty array when the user is nil' do
+      user = nil
+      site = Site.new(Guardian.new(user))
+
+      icij_group = Fabricate(:icij_group)
+
+      expect(site.available_icij_projects).to eq([])
+    end
   end
 
-  
+  describe '#icij_project_categories' do
+    it "returns an array of ids for the categories that exist inside of a user's icij project groups" do
+      user = Fabricate(:user)
+      site = Site.new(Guardian.new(user))
+
+
+      icij_group = Fabricate(:icij_group)
+      icij_group.add(user)
+
+      private_cat = Fabricate(:category)
+      Fabricate(:topic, category: private_cat)
+      private_cat.set_permissions(icij_group.id => 1)
+      private_cat.save
+
+      expect(site.icij_project_categories).to eq([private_cat.id])
+    end
+
+    it "does not return an array containing the category ids for categories that are not in the user's icij project groups" do
+      user = Fabricate(:user)
+      site = Site.new(Guardian.new(user))
+
+
+      icij_group = Fabricate(:icij_group)
+      icij_group.add(user)
+
+      another_icij_group = Fabricate(:icij_group)
+
+      private_cat = Fabricate(:category)
+      Fabricate(:topic, category: private_cat)
+      private_cat.set_permissions(icij_group.id => 1)
+      private_cat.save
+
+      another_private_cat = Fabricate(:category)
+      Fabricate(:topic, category: another_private_cat)
+      another_private_cat.set_permissions(another_icij_group.id => 1)
+      another_private_cat.save
+
+      expect(site.icij_project_categories).to_not include(another_private_cat.id)
+    end
+
+    it "returns empty array when user is nil" do
+      user = nil
+      site = Site.new(Guardian.new(user))
+
+
+      icij_group = Fabricate(:icij_group)
+
+      private_cat = Fabricate(:category)
+      Fabricate(:topic, category: private_cat)
+      private_cat.set_permissions(icij_group.id => 1)
+      private_cat.save
+
+      expect(site.icij_project_categories).to eq([])
+    end
+
+    it "returns empty array when user is not in any icij project groups" do
+      user = Fabricate(:user)
+      site = Site.new(Guardian.new(user))
+
+
+      icij_group = Fabricate(:icij_group)
+
+      private_cat = Fabricate(:category)
+      Fabricate(:topic, category: private_cat)
+      private_cat.set_permissions(icij_group.id => 1)
+      private_cat.save
+
+      expect(site.icij_project_categories).to eq([])
+    end
+  end
 end
