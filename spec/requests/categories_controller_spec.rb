@@ -22,6 +22,7 @@ describe CategoriesController do
           create_post = CategoryGroup.permission_types[:create_post]
 
           group = Fabricate(:icij_group)
+          group.add(admin)
 
           post "/categories.json", params: {
             name: "hello",
@@ -65,6 +66,32 @@ describe CategoriesController do
 
           expect(response.status).to eq(422)
           expect(response.body).to eq("{\"errors\":[\"Please assign a project to this group.\"]}")
+        end
+
+        it "does not work, if permissions are for a group to which the user is not a member" do
+          another_user = Fabricate(:user)
+          sign_in(another_user)
+
+          readonly = CategoryGroup.permission_types[:readonly]
+          create_post = CategoryGroup.permission_types[:create_post]
+
+          group = Fabricate(:icij_group)
+          group.add(another_user)
+          another_group = Fabricate(:icij_group)
+
+          post "/categories.json", params: {
+            name: "hello",
+            color: "ff0",
+            text_color: "fff",
+            slug: "hello-cat",
+            auto_close_hours: 72,
+            permissions: {
+              "#{another_group.name}" => :full
+            }
+          }
+
+          expect(response.status).to eq(422)
+          expect(response.body).to eq("{\"errors\":[\"You are not a member of this project.\"]}")
         end
       end
     end
