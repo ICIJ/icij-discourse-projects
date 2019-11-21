@@ -370,6 +370,7 @@ after_initialize do
 
   require_dependency "application_controller"
   require_dependency "categories_controller"
+  require_dependency "site"
     CategoriesController.class_eval do
       def create
         guardian.ensure_can_create!(Category)
@@ -384,6 +385,14 @@ after_initialize do
 
         if params[:permissions].nil?
           @category.errors[:base] << "Please assign a project to this group."
+          return render_json_error(@category)
+        end
+
+        icij_groups = Group.icij_projects_get(current_user).pluck(:name)
+        has_permission = icij_groups.any? { |group| (params[:permissions].keys).include? group }
+
+        unless has_permission
+          @category.errors[:base] << "You are not a member of this project."
           return render_json_error(@category)
         end
 
