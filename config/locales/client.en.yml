@@ -177,6 +177,8 @@ en:
 
     topic_admin_menu: "topic admin actions"
 
+    all_uploads_title: "Uploads"
+
     wizard_required: "Welcome to your new Discourse! Let’s get started with <a href='%{url}' data-auto-route='true'>the setup wizard</a> ✨"
     emails_are_disabled: "All outgoing email has been globally disabled by an administrator. No email notifications of any kind will be sent."
 
@@ -387,6 +389,9 @@ en:
       sent_by_you: "Sent by <a href='{{userUrl}}'>you</a>"
 
     directory:
+      country: "Country"
+      last_seen: "Last Seen"
+      created_at: "Created At"
       filter_name: "filter by username"
       title: "Users"
       likes_given: "Given"
