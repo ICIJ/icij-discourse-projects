@@ -381,7 +381,7 @@ describe GroupsController do
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
-        expect(json["extras"]["category_list"]["categories"].map { |c| c["id"] }).to eq([private_cat.id])
+        expect(json["lists"]["category_list"]["categories"].map { |c| c["id"] }).to eq([private_cat.id])
       end
 
       it "returns the correct topics for the categories in that group" do
@@ -399,7 +399,7 @@ describe GroupsController do
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
-        expect(json["extras"]["topic_list"]["topics"].map { |t| t["id"] }).to eq([topic.id])
+        expect(json["lists"]["topic_list"]["topics"].map { |t| t["id"] }).to eq([topic.id])
       end
     end
 
@@ -427,7 +427,7 @@ describe GroupsController do
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
-        expect(json["extras"]["category_list"]["categories"].map { |c| c["id"] }).to_not eq([another_private_cat.id])
+        expect(json["lists"]["category_list"]["categories"].map { |c| c["id"] }).to_not eq([another_private_cat.id])
       end
 
       it "does not return the topics for the categories in that group" do
@@ -445,7 +445,7 @@ describe GroupsController do
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
-        expect(json["extras"]["topic_list"]["topics"].map { |t| t["id"] }).to_not eq([another_topic.id])
+        expect(json["lists"]["topic_list"]["topics"].map { |t| t["id"] }).to_not eq([another_topic.id])
       end
     end
 
@@ -479,7 +479,7 @@ describe GroupsController do
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
-        expect(json["extras"]["category_list"]["categories"].map { |c| c["id"] }).to eq([another_private_cat.id])
+        expect(json["lists"]["category_list"]["categories"].map { |c| c["id"] }).to eq([another_private_cat.id])
       end
     end
   end

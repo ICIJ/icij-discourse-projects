@@ -3,11 +3,30 @@
 # version: 0.0.1
 # authors: Madeline O'Leary
 
-register_asset 'stylesheets/common/select-kit/category-chooser'
+register_asset 'stylesheets/common/select-kit/category-chooser.scss'
 
 after_initialize do
+  class ::CurrentUserSerializer
+    attributes :current_user_icij_projects,
+               :fellow_icij_project_members,
+               :icij_project_categories
 
-  require_dependency "category_list"
+   def icij_project_categories
+     groups = object.visible_groups.where(icij_group: true).pluck(:id)
+     category_ids = CategoryGroup.where(group_id: groups).pluck(:category_id)
+     Category.where(id: category_ids).pluck(:id)
+   end
+
+    def current_user_icij_projects
+      object.visible_groups.where(icij_group: true).pluck(:id, :name).map { |id, name| { id: id, name: name } }
+    end
+
+    def fellow_icij_project_members
+      groups = object.visible_groups.where(icij_group: true).pluck(:id)
+      GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
+    end
+  end
+
   class ::CategoryList
     def find_group(group_name, ensure_can_see: true)
       group = Group
@@ -86,10 +105,6 @@ after_initialize do
     end
   end
 
-  require_dependency "app/models/concerns/has_custom_fields"
-  require_dependency "app/models/concerns/anon_cache_invalidator"
-  require_dependency "lib/validators/url_validator"
-  require_dependency "app/models/group"
   class ::Group
     # this gathers all groups with icic_group: true, which means they were imported as projects by xemx
     scope :icij_projects, -> { where(icij_group: true) }
@@ -128,7 +143,6 @@ after_initialize do
     end
   end
 
-  require_dependency "search"
   class ::Search
     def icij_group_members(user)
       if user.admin?
@@ -266,9 +280,6 @@ after_initialize do
     end
   end
 
-  require_dependency "app/models/group"
-  require_dependency "app/models/category"
-  require_dependency "site"
   class ::Site
     # groups the project names in a simple array for easy use in later manipulations
     def icij_project_names
@@ -312,7 +323,46 @@ after_initialize do
     end
   end
 
-  require_dependency "category_serializer"
+  class ::BasicCategorySerializer
+    attributes :group_permissions,
+               :group_names,
+               :subcategory_group_names
+
+     def group_names
+      if object.category_groups.nil?
+        []
+      else
+        groups = object.category_groups.pluck(:group_id)
+        Group.where(id: groups).pluck(:name)
+      end
+    end
+
+    def subcategory_group_names
+      if object.parent_category_id
+        parent_category = Category.find(object.parent_category_id)
+        groups = parent_category.category_groups.pluck(:group_id)
+        Group.where(id: groups).pluck(:name)
+      else
+        []
+      end
+    end
+
+    def group_permissions
+      @group_permissions ||= begin
+        perms = object.category_groups.joins(:group).includes(:group).order("groups.name").map do |cg|
+          {
+            permission_type: cg.permission_type,
+            group_name: cg.group.name
+          }
+        end
+        if perms.length == 0 && !object.read_restricted
+          perms << { permission_type: CategoryGroup.permission_types[:full], group_name: Group[:everyone]&.name.presence || :everyone }
+        end
+        perms
+      end
+    end
+  end
+
   class ::CategorySerializer
     def available_groups
       user = scope && scope.user
@@ -321,7 +371,6 @@ after_initialize do
     end
   end
 
-  require_dependency "site_serializer"
   class ::SiteSerializer
     attributes :icij_project_names,
                :available_icij_projects,
@@ -330,255 +379,252 @@ after_initialize do
 
   end
 
-  require_dependency "basic_category_serializer"
-  class ::BasicCategorySerializer
-    attributes :group_names,
-               :subcategory_group_names
-
-   def group_names
-     if object.category_groups.nil?
-       []
-     else
-       groups = object.category_groups.pluck(:group_id)
-       Group.where(id: groups).pluck(:name)
-     end
-   end
-
-   def subcategory_group_names
-     if object.parent_category_id
-       parent_category = Category.find(object.parent_category_id)
-       groups = parent_category.category_groups.pluck(:group_id)
-       Group.where(id: groups).pluck(:name)
-     else
-       []
-     end
-   end
+  class ::TopicQuery
+    def self.public_valid_options
+      @public_valid_options ||=
+        %i(page
+           before
+           bumped_before
+           exclude_category_ids
+           topic_ids
+           category
+           order
+           ascending
+           min_posts
+           max_posts
+           status
+           filter
+           state
+           search
+           q
+           group_name
+           tags
+           match_all_tags
+           no_subcategories
+           no_tags)
+    end
   end
 
-  require_dependency "application_controller"
-  require_dependency "list_controller"
-  require_dependency 'topic_list_responder'
-  require_dependency 'topic_query'
-  require_dependency 'icij_topic_query'
-    ListController.class_eval do
-      private
+  ListController.class_eval do
+    private
 
-      def generate_list_for(action, target_user, opts)
-        action == "group_topics" ? IcijTopicQuery.new(current_user, opts).send("list_icij_group_topics", target_user) : TopicQuery.new(current_user, opts).send("list_#{action}", target_user)
+    def generate_list_for(action, target_user, opts)
+      action == "group_topics" ? IcijTopicQuery.new(current_user, opts).send("list_icij_group_topics", target_user) : TopicQuery.new(current_user, opts).send("list_#{action}", target_user)
+    end
+  end
+
+  CategoriesController.class_eval do
+    def create
+      guardian.ensure_can_create!(Category)
+      position = category_params.delete(:position)
+
+      @category =
+        begin
+          Category.new(category_params.merge(user: current_user))
+        rescue ArgumentError => e
+          return render json: { errors: [e.message] }, status: 422
+        end
+
+      if params[:permissions].nil?
+        @category.errors[:base] << "Please assign a project to this group."
+        return render_json_error(@category)
+      end
+
+      icij_groups = Group.icij_projects_get(current_user).pluck(:name)
+      has_permission = icij_groups.any? { |group| (params[:permissions].keys).include? group }
+
+      unless has_permission
+        @category.errors[:base] << "You are not a member of this project."
+        return render_json_error(@category)
+      end
+
+      if @category.save
+        @category.move_to(position.to_i) if position
+
+        Scheduler::Defer.later "Log staff action create category" do
+          @staff_action_logger.log_category_creation(@category)
+        end
+
+        render_serialized(@category, CategorySerializer)
+      else
+        return render_json_error(@category) unless @category.save
       end
     end
+  end
 
-  require_dependency "application_controller"
-  require_dependency "categories_controller"
-  require_dependency "site"
-    CategoriesController.class_eval do
-      def create
-        guardian.ensure_can_create!(Category)
-        position = category_params.delete(:position)
+  GroupsController.class_eval do
+    def index
+      type_filters_icij = {
+        my: Proc.new { |groups, user|
+          raise Discourse::NotFound unless user
+          Group.member_of(groups, user)
+        },
+        owner: Proc.new { |groups, user|
+          raise Discourse::NotFound unless user
+          Group.owner_of(groups, user)
+        },
+        public: Proc.new { |groups|
+          groups.where(public_admission: true, automatic: false)
+        },
+        close: Proc.new {
+          current_user.groups.where(
+            public_admission: false,
+            automatic: false
+          )
+        },
+        automatic: Proc.new { |groups|
+          groups.where(automatic: true)
+        }
+      }
 
-        @category =
-          begin
-            Category.new(category_params.merge(user: current_user))
-          rescue ArgumentError => e
-            return render json: { errors: [e.message] }, status: 422
-          end
-
-        if params[:permissions].nil?
-          @category.errors[:base] << "Please assign a project to this group."
-          return render_json_error(@category)
-        end
-
-        icij_groups = Group.icij_projects_get(current_user).pluck(:name)
-        has_permission = icij_groups.any? { |group| (params[:permissions].keys).include? group }
-
-        unless has_permission
-          @category.errors[:base] << "You are not a member of this project."
-          return render_json_error(@category)
-        end
-
-        if @category.save
-          @category.move_to(position.to_i) if position
-
-          Scheduler::Defer.later "Log staff action create category" do
-            @staff_action_logger.log_category_creation(@category)
-          end
-
-          render_serialized(@category, CategorySerializer)
-        else
-          return render_json_error(@category) unless @category.save
-        end
+      unless SiteSetting.enable_group_directory? || current_user&.staff?
+        raise Discourse::InvalidAccess.new(:enable_group_directory)
       end
+
+      page_size = 30
+      page = params[:page]&.to_i || 0
+      order = %w{name user_count}.delete(params[:order])
+      dir = params[:asc] ? 'ASC' : 'DESC'
+      groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).icij_projects_get(current_user)
+
+      if (filter = params[:filter]).present?
+        groups = Group.search_groups(filter, groups: groups)
+      end
+
+      type_filters = type_filters_icij.keys
+
+      if username = params[:username]
+        groups = type_filters_icij[:my].call(groups, User.find_by_username(username))
+        type_filters = type_filters - [:my, :owner]
+      end
+
+      unless guardian.is_staff?
+        # hide automatic groups from all non stuff to de-clutter page
+        groups = groups.where("automatic IS FALSE OR groups.id = #{Group::AUTO_GROUPS[:moderators]}")
+        type_filters.delete(:automatic)
+      end
+
+      if Group.preloaded_custom_field_names.present?
+        Group.preload_custom_fields(groups, Group.preloaded_custom_field_names)
+      end
+
+      if type = params[:type]&.to_sym
+        callback = type_filters_icij[type]
+        if !callback
+          raise Discourse::InvalidParameters.new(:type)
+        end
+        groups = callback.call(groups, current_user)
+      end
+
+      if current_user
+        group_users = GroupUser.where(group: groups, user: current_user)
+        user_group_ids = group_users.pluck(:group_id)
+        owner_group_ids = group_users.where(owner: true).pluck(:group_id)
+      else
+        type_filters = type_filters - [:my, :owner]
+      end
+
+      count = groups.count
+      groups = groups.offset(page * page_size).limit(page_size)
+
+      render_json_dump(
+        groups: serialize_data(groups,
+          BasicGroupSerializer,
+          user_group_ids: user_group_ids || [],
+          owner_group_ids: owner_group_ids || []
+        ),
+        extras: {
+          type_filters: type_filters
+        },
+        total_rows_groups: count,
+        load_more_groups: groups_path(
+          page: page + 1,
+          type: type,
+          order: order,
+          asc: params[:asc],
+          filter: filter
+        ),
+      )
     end
 
-  require_dependency "application_controller"
-    GroupsController.class_eval do
-      def index
-        type_filters_icij = {
-          my: Proc.new { |groups, user|
-            raise Discourse::NotFound unless user
-            Group.member_of(groups, user)
-          },
-          owner: Proc.new { |groups, user|
-            raise Discourse::NotFound unless user
-            Group.owner_of(groups, user)
-          },
-          public: Proc.new { |groups|
-            groups.where(public_admission: true, automatic: false)
-          },
-          close: Proc.new {
-            current_user.groups.where(
-              public_admission: false,
-              automatic: false
-            )
-          },
-          automatic: Proc.new { |groups|
-            groups.where(automatic: true)
-          }
-        }
+    def show
+      respond_to do |format|
+        group = find_group(:id)
 
-        unless SiteSetting.enable_group_directory? || current_user&.staff?
-          raise Discourse::InvalidAccess.new(:enable_group_directory)
+        format.html do
+          @title = group.full_name.present? ? group.full_name.capitalize : group.name
+          @description_meta = group.bio_cooked.present? ? PrettyText.excerpt(group.bio_cooked, 300) : @title
+          render :show
         end
-
-        page_size = 30
-        page = params[:page]&.to_i || 0
-        order = %w{name user_count}.delete(params[:order])
-        dir = params[:asc] ? 'ASC' : 'DESC'
-        groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).icij_projects_get(current_user)
-
-        if (filter = params[:filter]).present?
-          groups = Group.search_groups(filter, groups: groups)
-        end
-
-        type_filters = type_filters_icij.keys
-
-        if username = params[:username]
-          groups = type_filters_icij[:my].call(groups, User.find_by_username(username))
-          type_filters = type_filters - [:my, :owner]
-        end
-
-        unless guardian.is_staff?
-          # hide automatic groups from all non stuff to de-clutter page
-          groups = groups.where("automatic IS FALSE OR groups.id = #{Group::AUTO_GROUPS[:moderators]}")
-          type_filters.delete(:automatic)
-        end
-
-        if Group.preloaded_custom_field_names.present?
-          Group.preload_custom_fields(groups, Group.preloaded_custom_field_names)
-        end
-
-        if type = params[:type]&.to_sym
-          callback = type_filters_icij[type]
-          if !callback
-            raise Discourse::InvalidParameters.new(:type)
-          end
-          groups = callback.call(groups, current_user)
-        end
-
-        if current_user
-          group_users = GroupUser.where(group: groups, user: current_user)
-          user_group_ids = group_users.pluck(:group_id)
-          owner_group_ids = group_users.where(owner: true).pluck(:group_id)
-        else
-          type_filters = type_filters - [:my, :owner]
-        end
-
-        count = groups.count
-        groups = groups.offset(page * page_size).limit(page_size)
-
-        render_json_dump(
-          groups: serialize_data(groups,
-            BasicGroupSerializer,
-            user_group_ids: user_group_ids || [],
-            owner_group_ids: owner_group_ids || []
-          ),
-          extras: {
-            type_filters: type_filters
-          },
-          total_rows_groups: count,
-          load_more_groups: groups_path(
-            page: page + 1,
-            type: type,
-            order: order,
-            asc: params[:asc],
-            filter: filter
-          ),
-        )
-      end
-
-      def show
-        respond_to do |format|
-          group = find_group(:id)
-
-          format.html do
-            @title = group.full_name.present? ? group.full_name.capitalize : group.name
-            @description_meta = group.bio_cooked.present? ? PrettyText.excerpt(group.bio_cooked, 300) : @title
-            render :show
-          end
-
-          format.json do
-            groups = Group.visible_groups(current_user)
-            icij_groups = Group.icij_projects_get(current_user)
-
-            if !guardian.is_staff?
-              groups = groups.where(automatic: false)
-            end
-
-            render_json_dump(
-              group: serialize_data(group, GroupShowSerializer, root: nil),
-              extras: {
-                visible_group_names: groups.pluck(:name),
-                icij_group_names: icij_groups.pluck(:name)
-              }
-            )
-          end
-        end
-      end
-
-      def categories
-        group = find_group(:group_id)
-        name = group.name
-
-        category_options = {
-          group_name: name,
-          include_topics: false
-        }
-
-        categories = group.categories.all
-        category_ids = categories.pluck(:id)
-        ids_to_exclude = Category.where.not(id: category_ids).pluck(:id)
-
-        topic_options = {
-          per_page: SiteSetting.categories_topics,
-          no_definitions: true,
-          exclude_category_ids: ids_to_exclude
-        }
-
-        result = CategoryAndTopicLists.new
-        result.category_list = CategoryList.new(guardian, category_options)
-        result.topic_list = TopicQuery.new(current_user, topic_options).list_latest
 
         draft_key = Draft::NEW_TOPIC
         draft_sequence = DraftSequence.current(current_user, draft_key)
         draft = Draft.get(current_user, draft_key, draft_sequence) if current_user
 
-        %w{category topic}.each do |type|
-          result.send(:"#{type}_list").draft = draft
-          result.send(:"#{type}_list").draft_key = draft_key
-          result.send(:"#{type}_list").draft_sequence = draft_sequence
+        format.json do
+          groups = Group.visible_groups(current_user)
+          icij_groups = Group.icij_projects_get(current_user)
+
+          if !guardian.is_staff?
+            groups = groups.where(automatic: false)
+          end
+
+          render_json_dump(
+            group: serialize_data(group, GroupShowSerializer, root: nil),
+            draft_key: draft_key,
+            draft_sequence: draft_sequence,
+            draft: draft,
+            extras: {
+              visible_group_names: groups.pluck(:name),
+              icij_group_names: icij_groups.pluck(:name)
+            }
+          )
         end
-
-        render_json_dump(
-          group: serialize_data(group, GroupShowSerializer, root: nil),
-          extras: serialize_data(result, CategoryAndTopicListsSerializer, root: false)
-        )
       end
     end
 
-    require_dependency 'application_controller'
-    Discourse::Application.routes.append do
-      resources :groups, id: RouteFormat.username do
-        get 'categories'
+    def categories
+      group = find_group(:group_id)
+      name = group.name
+
+      category_options = {
+        group_name: name,
+        include_topics: false
+      }
+
+      categories = group.categories.all
+      category_ids = categories.pluck(:id)
+      ids_to_exclude = Category.where.not(id: category_ids).pluck(:id)
+
+      topic_options = {
+        per_page: SiteSetting.categories_topics,
+        no_definitions: true,
+        exclude_category_ids: ids_to_exclude
+      }
+
+      result = CategoryAndTopicLists.new
+      result.category_list = CategoryList.new(guardian, category_options)
+      result.topic_list = TopicQuery.new(current_user, topic_options).list_latest
+
+      draft_key = Draft::NEW_TOPIC
+      draft_sequence = DraftSequence.current(current_user, draft_key)
+      draft = Draft.get(current_user, draft_key, draft_sequence) if current_user
+
+      %w{category topic}.each do |type|
+        result.send(:"#{type}_list").draft = draft
+        result.send(:"#{type}_list").draft_key = draft_key
+        result.send(:"#{type}_list").draft_sequence = draft_sequence
       end
+
+      render_json_dump(
+        lists: serialize_data(result, CategoryAndTopicListsSerializer, root: false)
+      )
     end
+  end
+
+  Discourse::Application.routes.append do
+    resources :groups, id: RouteFormat.username do
+      get 'categories'
+    end
+  end
 end

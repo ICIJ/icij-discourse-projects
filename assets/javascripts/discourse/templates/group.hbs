@@ -35,34 +35,47 @@
           class="inline"
           model=model
           showLogin='showLogin'}}
+      {{#if displayMessageDeleteButtons}}
+        {{#if displayGroupMessageButton}}
+          {{d-button
+              action="messageGroup"
+              class="btn-primary group-message-button inline"
+              icon="envelope"
+              label="groups.message"}}
+        {{/if}}
 
-      {{#if displayGroupMessageButton}}
-        {{d-button
-            action="messageGroup"
-            class="btn-primary group-message-button inline"
-            icon="envelope"
-            label="groups.message"}}
+        {{#if currentUser.admin}}
+          {{d-button action="destroy"
+              disabled=destroying
+              icon="trash"
+              class='btn-danger'
+              label="admin.groups.delete"}}
+        {{/if}}
       {{/if}}
 
-      {{#if currentUser.admin}}
-        {{d-button action="destroy"
-            disabled=destroying
-            icon="trash"
-            class='btn-danger'
-            label="admin.groups.delete"}}
-      {{/if}}
     </div>
   </div>
 
   <div class="list-controls">
     <div class="container">
+      {{#if displayButtons }}
+        {{create-topic-category-buttons
+          canCreateTopic=canCreateTopic
+          createTopic=(route-action "createTopic")
+          createTopicDisabled=cannotCreateTopicOnCategory
+          hasDraft=draft
+          editCategory=(route-action "editCategory" category)
+          path=currentPath
+        }}
+      {{/if}}
+
       {{group-navigation group=model currentPath=application.currentPath tabs=icijTabs}}
     </div>
   </div>
 
-    <div class='user-table'>
-      <div class='wrapper'>
-        {{outlet}}
-      </div>
+  <div class='user-table'>
+    <div class='wrapper'>
+      {{outlet}}
     </div>
+  </div>
 </div>

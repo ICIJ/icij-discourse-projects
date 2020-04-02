@@ -1,26 +1,4 @@
 <div class="container group {{model.group.name}}">
-  <div class="group-details-container">
-    {{#if model.group.bio_cooked}}
-      <hr>
-
-      <div class='group-bio'>
-        <p>{{{model.group.bio_cooked}}}</p>
-      </div>
-    {{/if}}
-  </div>
-
-  <div class="list-controls">
-    <div class="container">
-      {{group-categories-navigation group=model currentPath=application.currentPath tabs=icijTabs}}
-
-      {{gc-navigation
-        canCreateTopic=canCreateTopic
-        createTopic=(route-action "createTopic")
-        createTopicDisabled=cannotCreateTopicOnCategory
-        hasDraft=draft
-        editCategory=(route-action "editCategory" category)}}
-    </div>
-  </div>
 
   <div class='clear'></div>
 

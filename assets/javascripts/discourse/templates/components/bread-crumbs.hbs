@@ -1,0 +1,22 @@
+{{#each categoryBreadcrumbs as |breadcrumb|}}
+  {{#if breadcrumb.hasOptions}}
+    {{category-drop
+      category=breadcrumb.category
+      categories=breadcrumb.options
+      options=(hash
+        parentCategory=breadcrumb.parentCategory
+        subCategory=breadcrumb.isSubcategory
+        noSubcategories=breadcrumb.noSubcategories
+        autoFilterable=true
+      )
+    }}
+  {{/if}}
+{{/each}}
+
+{{#if siteSettings.tagging_enabled}}
+  {{tag-drop currentCategory=category tagId=tagId}}
+{{/if}}
+
+<!-- modified from original to pass args to plugin outlet -->
+
+{{plugin-outlet name="bread-crumbs-right" args=(hash project=currentProjectName) connectorTagName="li" tagName=""}}

@@ -1,6 +1,8 @@
 import { default as computed } from "ember-addons/ember-computed-decorators";
 import GroupController from 'discourse/controllers/group';
 
+// this exact same logic isn't working in the general initializer, so i've put it into its own, which seems to solve the problem
+
 const Tab = Ember.Object.extend({
   init() {
     this._super();
@@ -12,7 +14,6 @@ const Tab = Ember.Object.extend({
 
 export default {
   name: 'extend-group-controller-for-projects',
-  before: 'inject-discourse-objects',
   initialize() {
 
     GroupController.reopen({
@@ -33,7 +34,7 @@ export default {
           i18nKey: "icij.title"
         })
 
-        const defaultTabs = [icijMembersTab, icijGroupsTab, Tab.create({ name: "activity" })];
+        const defaultTabs = [icijGroupsTab, Tab.create({ name: "activity" })];
 
         if (showMessages) {
           defaultTabs.push(
@@ -53,6 +54,8 @@ export default {
             })
           );
         }
+
+        defaultTabs.push(icijMembersTab);
 
         return defaultTabs;
       }

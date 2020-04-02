@@ -1,3 +1,4 @@
+<!-- renders the create topic + create group buttons for /g/(group name)/categories -->
 {{create-category-button
   action=(route-action "createCategory")
   label=createCategoryLabel
@@ -5,7 +6,7 @@
 
 {{create-topic-button
   canCreateTopic=canCreateTopic
-  action=createTopic
+  action=(route-action "createTopic")
   disabled=createTopicDisabled
   label=createTopicLabel
 }}
