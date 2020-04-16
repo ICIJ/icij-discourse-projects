@@ -4,8 +4,18 @@
 # authors: Madeline O'Leary
 
 register_asset 'stylesheets/common/select-kit/category-chooser.scss'
+PLUGIN_NAME = 'icij_discourse_projects'.freeze
 
 after_initialize do
+
+  module ::IcijDiscourseProjects
+    class Engine < ::Rails::Engine
+      engine_name PLUGIN_NAME
+      isolate_namespace IcijDiscourseProjects
+    end
+  end
+
+
   class ::CurrentUserSerializer
     attributes :current_user_icij_projects,
                :fellow_icij_project_members,
@@ -623,8 +633,8 @@ after_initialize do
   end
 
   Discourse::Application.routes.append do
-    resources :groups, id: RouteFormat.username do
-      get 'categories'
+    %w{groups g}.each do |root_path|
+      get "g/:group_id/categories" => 'groups#categories', constraints: { group_id: RouteFormat.username }
     end
   end
 end

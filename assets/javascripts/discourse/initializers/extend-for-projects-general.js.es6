@@ -340,7 +340,7 @@ export default {
         const type = opts.type || "categories";
         const data = {};
 
-        return ajax(`/groups/${this.name}/${type}.json`).then(result => {
+        return ajax(`/g/${this.name}/${type}.json`).then(result => {
           return EmberObject.create({
             categories: CategoryList.categoriesFrom(this.store, result.lists),
             topics: TopicList.topicsFrom(this.store, result.lists),
