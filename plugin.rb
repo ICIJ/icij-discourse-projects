@@ -367,11 +367,9 @@ after_initialize do
     end
   end
 
-  class ::BasicCategorySerializer
-    attributes :icij_projects_for_category,
-               :icij_project_subcategories_for_category,
-               :icij_project_permissions_for_category
-  end
+  add_to_serializer(:basic_category, :icij_projects_for_category) { object.icij_projects_for_category }
+  add_to_serializer(:basic_category, :icij_project_subcategories_for_category) { object.icij_project_subcategories_for_category }
+  add_to_serializer(:basic_category, :icij_project_permissions_for_category) { object.icij_project_permissions_for_category }
 
   class ::CategorySerializer
     def available_groups
