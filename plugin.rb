@@ -333,23 +333,19 @@ after_initialize do
     end
   end
 
-  class ::BasicCategorySerializer
-    attributes :group_permissions,
-               :group_names,
-               :subcategory_group_names
-
-     def group_names
-      if object.category_groups.nil?
+  class ::Category
+    def icij_projects_for_category
+      if self.category_groups.nil?
         []
       else
-        groups = object.category_groups.pluck(:group_id)
+        groups = self.category_groups.pluck(:group_id)
         Group.where(id: groups).pluck(:name)
       end
     end
 
-    def subcategory_group_names
-      if object.parent_category_id
-        parent_category = Category.find(object.parent_category_id)
+    def icij_project_subcategories_for_category
+      if self.parent_category_id
+        parent_category = Category.find(self.parent_category_id)
         groups = parent_category.category_groups.pluck(:group_id)
         Group.where(id: groups).pluck(:name)
       else
@@ -357,20 +353,24 @@ after_initialize do
       end
     end
 
-    def group_permissions
-      @group_permissions ||= begin
-        perms = object.category_groups.joins(:group).includes(:group).order("groups.name").map do |cg|
-          {
-            permission_type: cg.permission_type,
-            group_name: cg.group.name
-          }
-        end
-        if perms.length == 0 && !object.read_restricted
-          perms << { permission_type: CategoryGroup.permission_types[:full], group_name: Group[:everyone]&.name.presence || :everyone }
-        end
-        perms
+    def icij_project_permissions_for_category
+      perms = self.category_groups.joins(:group).includes(:group).order("groups.name").map do |cg|
+        {
+          permission_type: cg.permission_type,
+          group_name: cg.group.name
+        }
       end
+      if perms.length == 0 && !self.read_restricted
+        perms << { permission_type: CategoryGroup.permission_types[:full], group_name: Group[:everyone]&.name.presence || :everyone }
+      end
+      perms
     end
+  end
+
+  class ::BasicCategorySerializer
+    attributes :icij_projects_for_category,
+               :icij_project_subcategories_for_category,
+               :icij_project_permissions_for_category
   end
 
   class ::CategorySerializer
