@@ -12,14 +12,6 @@
             groupName=model.name}}
         </span>
       {{/if}}
-
-      <span>
-        <span class='group-info-name'>{{groupName}}</span>
-
-        <div>
-          {{#if model.full_name}}<span class='group-info-full-name'>{{model.name}}</span>{{/if}}
-        </div>
-      </span>
     </div>
 
     {{#if model.bio_cooked}}
@@ -35,7 +27,7 @@
           class="inline"
           model=model
           showLogin='showLogin'}}
-      {{#if displayMessageDeleteButtons}}
+
         {{#if displayGroupMessageButton}}
           {{d-button
               action="messageGroup"
@@ -43,15 +35,6 @@
               icon="envelope"
               label="groups.message"}}
         {{/if}}
-
-        {{#if currentUser.admin}}
-          {{d-button action="destroy"
-              disabled=destroying
-              icon="trash"
-              class='btn-danger'
-              label="admin.groups.delete"}}
-        {{/if}}
-      {{/if}}
 
     </div>
   </div>

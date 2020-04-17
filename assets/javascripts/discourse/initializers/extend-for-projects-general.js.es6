@@ -103,6 +103,64 @@ function initializePlugin(api) {
     }
   }),
 
+  api.modifyClass("model:category", {
+    save() {
+      const id = this.id;
+      const url = id ? `/categories/${id}` : "/categories";
+
+      return ajax(url, {
+        data: {
+          name: this.name,
+          slug: this.slug,
+          color: this.color,
+          text_color: this.text_color,
+          secure: this.secure,
+          permissions: this._permissionsForUpdate(),
+          auto_close_hours: this.auto_close_hours,
+          auto_close_based_on_last_post: this.get(
+            "auto_close_based_on_last_post"
+          ),
+          position: this.position,
+          email_in: this.email_in,
+          email_in_allow_strangers: this.email_in_allow_strangers,
+          group_names: this.get("group_names"),
+          subcategory_group_names: this.get("subcategory_group_names"),
+          group_permissions: this.get("group_permissions"),
+          mailinglist_mirror: this.mailinglist_mirror,
+          parent_category_id: this.parent_category_id,
+          uploaded_logo_id: this.get("uploaded_logo.id"),
+          uploaded_background_id: this.get("uploaded_background.id"),
+          allow_badges: this.allow_badges,
+          custom_fields: this.custom_fields,
+          topic_template: this.topic_template,
+          all_topics_wiki: this.all_topics_wiki,
+          allowed_tags: this.allowed_tags,
+          allowed_tag_groups: this.allowed_tag_groups,
+          allow_global_tags: this.allow_global_tags,
+          required_tag_group_name: this.required_tag_groups
+            ? this.required_tag_groups[0]
+            : null,
+          min_tags_from_required_group: this.min_tags_from_required_group,
+          sort_order: this.sort_order,
+          sort_ascending: this.sort_ascending,
+          topic_featured_link_allowed: this.topic_featured_link_allowed,
+          show_subcategory_list: this.show_subcategory_list,
+          num_featured_topics: this.num_featured_topics,
+          default_view: this.default_view,
+          subcategory_list_style: this.subcategory_list_style,
+          default_top_period: this.default_top_period,
+          minimum_required_tags: this.minimum_required_tags,
+          navigate_to_first_post_after_read: this.get(
+            "navigate_to_first_post_after_read"
+          ),
+          search_priority: this.search_priority,
+          reviewable_by_group_name: this.reviewable_by_group_name
+        },
+        type: id ? "PUT" : "POST"
+      });
+    }
+  }),
+
   api.modifyClass("controller:group", {
     showing: "categories",
 
@@ -130,8 +188,7 @@ function initializePlugin(api) {
     setupController(controller, model) {
       controller.setProperties({
         model,
-        displayButtons: false,
-        displayMessageDeleteButtons: false
+        displayButtons: false
       });
     }
   }),
@@ -139,8 +196,7 @@ function initializePlugin(api) {
   api.modifyClass("route:group-messages", {
     setupController(controller, model) {
       this.controllerFor("group").setProperties({
-        displayButtons: false,
-        displayMessageDeleteButtons: true
+        displayButtons: false
       })
     }
   }),
@@ -148,8 +204,7 @@ function initializePlugin(api) {
   api.modifyClass("route:group-members", {
     beforeModel() {
       this.controllerFor("group").setProperties({
-        displayButtons: false,
-        displayMessageDeleteButtons: true
+        displayButtons: false
       })
     }
   }),
@@ -157,8 +212,7 @@ function initializePlugin(api) {
   api.modifyClass("route:group-activity-posts", {
     setupController(controller, model) {
       this.controllerFor("group").setProperties({
-        displayButtons: false,
-        displayMessageDeleteButtons: true
+        displayButtons: false
       })
     }
   }),
