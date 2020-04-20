@@ -55,11 +55,11 @@ function initializePlugin(api) {
 
     if (isGroupRoute) {
       let groupName = route.controllerFor('group').get('model.name');
-      let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.group_names[0] === groupName)))
+      let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === groupName)))
       return categories
     } else if (discoveryRoutesToCheck.includes(discoveryRouteName)) {
-      let groupName = route.controllerFor('discovery').get('category.group_names') || []
-      let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.group_names[0] === groupName[0])))
+      let groupName = route.controllerFor('discovery').get('category.icij_projects_for_category') || []
+      let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === groupName[0])))
       if (groupName.length === 0) {
         return existingContent.filter(c => icijProjectCategories.includes(c.id))
       } else {
@@ -76,14 +76,14 @@ function initializePlugin(api) {
     const route = container.lookup("route:application");
     const discoveryRouteName = route.controller.currentRouteName;
 
-    let groupName = route.controllerFor('discovery').get('category.group_names') || []
+    let groupName = route.controllerFor('discovery').get('category.icij_projects_for_category') || []
 
     let discoveryRoutesToCheck = ["discovery.categoryNone", "discovery.latestParentCategory", "discovery.topParentCategory", "discovery.newParentCategory", "discovery.unreadParentCategory", "discovery.parentCategory", "discovery.category"]
 
     if (discoveryRoutesToCheck.includes(discoveryRouteName)) {
       return existingContent.filter(c => {
         if (c.id !== "all-categories") {
-          return (c.group_names[0] === groupName[0])
+          return (c.icij_projects_for_category[0] === groupName[0])
         }
       });
     } else {
@@ -100,64 +100,6 @@ function initializePlugin(api) {
           DiscourseURL.routeToUrl(`/g`);
         }
       }
-    }
-  }),
-
-  api.modifyClass("model:category", {
-    save() {
-      const id = this.id;
-      const url = id ? `/categories/${id}` : "/categories";
-
-      return ajax(url, {
-        data: {
-          name: this.name,
-          slug: this.slug,
-          color: this.color,
-          text_color: this.text_color,
-          secure: this.secure,
-          permissions: this._permissionsForUpdate(),
-          auto_close_hours: this.auto_close_hours,
-          auto_close_based_on_last_post: this.get(
-            "auto_close_based_on_last_post"
-          ),
-          position: this.position,
-          email_in: this.email_in,
-          email_in_allow_strangers: this.email_in_allow_strangers,
-          group_names: this.get("icij_projects_for_category"),
-          subcategory_group_names: this.get("icij_project_subcategories_for_category"),
-          group_permissions: this.get("icij_project_permissions_for_category"),
-          mailinglist_mirror: this.mailinglist_mirror,
-          parent_category_id: this.parent_category_id,
-          uploaded_logo_id: this.get("uploaded_logo.id"),
-          uploaded_background_id: this.get("uploaded_background.id"),
-          allow_badges: this.allow_badges,
-          custom_fields: this.custom_fields,
-          topic_template: this.topic_template,
-          all_topics_wiki: this.all_topics_wiki,
-          allowed_tags: this.allowed_tags,
-          allowed_tag_groups: this.allowed_tag_groups,
-          allow_global_tags: this.allow_global_tags,
-          required_tag_group_name: this.required_tag_groups
-            ? this.required_tag_groups[0]
-            : null,
-          min_tags_from_required_group: this.min_tags_from_required_group,
-          sort_order: this.sort_order,
-          sort_ascending: this.sort_ascending,
-          topic_featured_link_allowed: this.topic_featured_link_allowed,
-          show_subcategory_list: this.show_subcategory_list,
-          num_featured_topics: this.num_featured_topics,
-          default_view: this.default_view,
-          subcategory_list_style: this.subcategory_list_style,
-          default_top_period: this.default_top_period,
-          minimum_required_tags: this.minimum_required_tags,
-          navigate_to_first_post_after_read: this.get(
-            "navigate_to_first_post_after_read"
-          ),
-          search_priority: this.search_priority,
-          reviewable_by_group_name: this.reviewable_by_group_name
-        },
-        type: id ? "PUT" : "POST"
-      });
     }
   }),
 
@@ -227,7 +169,7 @@ function initializePlugin(api) {
         if (filterCategory.length === 0) {
           setPermissions = [];
         } else {
-          setPermissions = filterCategory.group_permissions
+          setPermissions = filterCategory.icij_project_permissions_for_category
         }
 
         const model = this.store.createRecord("category", {
@@ -358,10 +300,10 @@ export default {
           case this.isGroupRoute():
             names = [ this.route().controllerFor('group').get('model.name') ]
           case this.isTopicRoute():
-            names = this.route().controllerFor('topic').get('model.category.group_names') || []
+            names = this.route().controllerFor('topic').get('model.category.icij_projects_for_category') || []
             break;
           case this.isDiscoveryRoute():
-            names = this.route().controllerFor('discovery').get('category.group_names') || []
+            names = this.route().controllerFor('discovery').get('category.icij_projects_for_category') || []
         }
 
         if (names.length > 0) {

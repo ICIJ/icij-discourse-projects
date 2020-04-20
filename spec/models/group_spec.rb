@@ -1,5 +1,6 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
-require 'group'
 
 describe Group do
   context "filtering out icij groups (projects) generated via xemx" do

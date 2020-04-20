@@ -379,13 +379,10 @@ after_initialize do
     end
   end
 
-  class ::SiteSerializer
-    attributes :icij_project_names,
-               :available_icij_projects,
-               :fellow_icij_project_members,
-               :icij_project_categories
-
-  end
+  add_to_serializer(:site, :icij_project_names) { object.icij_project_names }
+  add_to_serializer(:site, :available_icij_projects) { object.available_icij_projects }
+  add_to_serializer(:site, :fellow_icij_project_members) { object.fellow_icij_project_members }
+  add_to_serializer(:site, :icij_project_categories) { object.icij_project_categories }
 
   class ::TopicQuery
     def self.public_valid_options

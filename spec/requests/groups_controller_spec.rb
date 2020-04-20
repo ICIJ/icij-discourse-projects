@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe GroupsController do
@@ -64,14 +66,14 @@ describe GroupsController do
       sign_in(Fabricate(:user))
       icij_group.update!(visibility_level: Group.visibility_levels[:owners])
 
-      get "/groups/#{icij_group.name}.json"
+      get "/g/#{icij_group.name}.json"
 
       expect(response.status).to eq(403)
     end
 
     it "returns the right response" do
       sign_in(user)
-      get "/groups/#{icij_group.name}.json"
+      get "/g/#{icij_group.name}.json"
 
       expect(response.status).to eq(200)
 
@@ -84,7 +86,7 @@ describe GroupsController do
     context 'as an admin' do
       it "returns the right response" do
         sign_in(Fabricate(:admin))
-        get "/groups/#{icij_group.name}.json"
+        get "/g/#{icij_group.name}.json"
 
         expect(response.status).to eq(200)
 
@@ -107,7 +109,7 @@ describe GroupsController do
       sign_in(Fabricate(:user))
       icij_group.update!(visibility_level: Group.visibility_levels[:owners])
 
-      get "/groups/#{icij_group.name}/posts.json"
+      get "/g/#{icij_group.name}/posts.json"
 
       expect(response.status).to eq(403)
     end
@@ -124,7 +126,7 @@ describe GroupsController do
       post =  Fabricate(:post, user: user, topic: Fabricate(:topic, category: private_cat, user: user)
 )
 
-      get "/groups/#{icij_group.name}/posts.json"
+      get "/g/#{icij_group.name}/posts.json"
 
       expect(response.status).to eq(200)
 
@@ -136,10 +138,10 @@ describe GroupsController do
     it "returns correct error code with invalid params" do
       sign_in(Fabricate(:user))
 
-      get "/groups/#{icij_group.name}/members.json?limit=-1"
+      get "/g/#{icij_group.name}/members.json?limit=-1"
       expect(response.status).to eq(400)
 
-      get "/groups/#{icij_group.name}/members.json?offset=-1"
+      get "/g/#{icij_group.name}/members.json?offset=-1"
       expect(response.status).to eq(400)
     end
 
@@ -147,7 +149,7 @@ describe GroupsController do
       sign_in(Fabricate(:user))
       icij_group.update!(visibility_level: Group.visibility_levels[:owners])
 
-      get "/groups/#{icij_group.name}/members.json"
+      get "/g/#{icij_group.name}/members.json"
 
       expect(response.status).to eq(403)
     end
@@ -236,7 +238,7 @@ describe GroupsController do
       it 'should not be allowed to update automatic groups' do
         group = Group.find(Group::AUTO_GROUPS[:admins])
 
-        put "/groups/#{group.id}.json", params: {
+        put "/g/#{group.id}.json", params: {
           group: {
             messageable_level: 1
           }
@@ -322,7 +324,7 @@ describe GroupsController do
 
       it 'triggers a extensibility event' do
         event = DiscourseEvent.track_events {
-          put "/groups/#{group.id}.json", params: { group: { flair_color: 'BBB' } }
+          put "/g/#{group.id}.json", params: { group: { flair_color: 'BBB' } }
         }.last
 
         expect(event[:event_name]).to eq(:group_updated)
@@ -334,7 +336,7 @@ describe GroupsController do
       it 'should not be able to update the group' do
         sign_in(user)
 
-        put "/groups/#{icij_group.id}.json", params: { group: { name: 'testing' } }
+        put "/g/#{icij_group.id}.json", params: { group: { name: 'testing' } }
 
         expect(response.status).to eq(403)
       end
@@ -361,7 +363,7 @@ describe GroupsController do
       it "returns the right response if user is a member" do
         sign_in(user)
 
-        get "/groups/#{icij_group.name}/categories.json"
+        get "/g/#{icij_group.name}/categories.json"
 
         expect(response.status).to eq(200)
       end
@@ -377,7 +379,7 @@ describe GroupsController do
 
         topic = Fabricate(:topic, category: private_cat)
 
-        get "/groups/#{icij_group.name}/categories.json"
+        get "/g/#{icij_group.name}/categories.json"
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
@@ -395,7 +397,7 @@ describe GroupsController do
 
         topic = Fabricate(:topic, category: private_cat)
 
-        get "/groups/#{icij_group.name}/categories.json"
+        get "/g/#{icij_group.name}/categories.json"
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
@@ -407,7 +409,7 @@ describe GroupsController do
       it "returns the right response if user is not a member" do
         sign_in(user)
 
-        get "/groups/#{another_icij_group.name}/categories.json"
+        get "/g/#{another_icij_group.name}/categories.json"
 
         expect(response.status).to eq(403)
       end
@@ -423,7 +425,7 @@ describe GroupsController do
 
         topic = Fabricate(:topic, category: private_cat)
 
-        get "/groups/#{icij_group.name}/categories.json"
+        get "/g/#{icij_group.name}/categories.json"
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
@@ -441,7 +443,7 @@ describe GroupsController do
 
         topic = Fabricate(:topic, category: private_cat)
 
-        get "/groups/#{icij_group.name}/categories.json"
+        get "/g/#{icij_group.name}/categories.json"
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
@@ -455,7 +457,7 @@ describe GroupsController do
 
         user.update!(admin: true)
 
-        get "/groups/#{another_icij_group.name}/categories.json"
+        get "/g/#{another_icij_group.name}/categories.json"
 
         expect(response.status).to eq(200)
       end
@@ -475,7 +477,7 @@ describe GroupsController do
 
         another_icij_group.update!(categories: [another_private_cat])
 
-        get "/groups/#{another_icij_group.name}/categories.json"
+        get "/g/#{another_icij_group.name}/categories.json"
 
         expect(response.status).to eq(200)
         json = JSON.parse(response.body)
