@@ -25,6 +25,8 @@ import GroupIndexController from "discourse/controllers/group-index";
 import Category from "discourse/models/category";
 import Session from "discourse/models/session";
 import User from "discourse/models/user";
+import Topic from "discourse/models/topic";
+import Category from "discourse/models/category";
 
 function initializePlugin(api) {
   api.reopenWidget("quick-access-panel", {
@@ -91,6 +93,35 @@ function initializePlugin(api) {
     }
   }),
 
+  api.modifyClass("route:group-activity-posts", {
+    model(params, transition) {
+      return this.modelFor("group").findPosts();
+    },
+
+    setupController(controller, model) {
+      this.controllerFor("group").setProperties({
+        displayButtons: false
+      })
+    }
+  }),
+
+  api.modifyClass("model:group", {
+    findPosts(opts) {
+      opts = opts || {};
+      const type = opts.type || "posts";
+      const data = {};
+
+      return ajax(`/groups/${this.name}/${type}.json`, { data }).then(posts => {
+        return posts.map(p => {
+          p.user = User.create(p.user);
+          p.topic = Topic.create(p.topic);
+          p.category = Category.findById(p.category_id);
+          return EmberObject.create(p);
+        });
+      });
+    }
+  }),
+
   api.modifyClass("component:group-dropdown", {
     actions: {
       onChange(groupName) {
@@ -145,14 +176,6 @@ function initializePlugin(api) {
 
   api.modifyClass("route:group-members", {
     beforeModel() {
-      this.controllerFor("group").setProperties({
-        displayButtons: false
-      })
-    }
-  }),
-
-  api.modifyClass("route:group-activity-posts", {
-    setupController(controller, model) {
       this.controllerFor("group").setProperties({
         displayButtons: false
       })
