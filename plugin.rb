@@ -408,6 +408,55 @@ after_initialize do
            no_subcategories
            no_tags)
     end
+
+    def create_list(filter, options = {}, topics = nil)
+      topics ||= default_results(options)
+      topics = yield(topics) if block_given?
+
+      options = options.merge(@options)
+
+
+      if options[:exclude_category_ids]
+        topics = topics.where.not(category_id: options[:exclude_category_ids])
+      end
+
+      if ["activity", "default"].include?(options[:order] || "activity") &&
+          !options[:unordered] &&
+          filter != :private_messages
+        topics = prioritize_pinned_topics(topics, options)
+      end
+
+      topics = topics.to_a
+
+      if options[:preload_posters]
+        user_ids = []
+        topics.each do |ft|
+          user_ids << ft.user_id << ft.last_post_user_id << ft.featured_user_ids << ft.allowed_user_ids
+        end
+
+        avatar_lookup = AvatarLookup.new(user_ids)
+        primary_group_lookup = PrimaryGroupLookup.new(user_ids)
+
+        # memoize for loop so we don't keep looking these up
+        translations = TopicPostersSummary.translations
+
+        topics.each do |t|
+          t.posters = t.posters_summary(
+            avatar_lookup: avatar_lookup,
+            primary_group_lookup: primary_group_lookup,
+            translations: translations
+          )
+        end
+      end
+
+      topics.each do |t|
+        t.allowed_user_ids = filter == :private_messages ? t.allowed_users.map { |u| u.id } : []
+      end
+
+      list = TopicList.new(filter, @user, topics, options.merge(@options))
+      list.per_page = options[:per_page] || per_page_setting
+      list
+    end
   end
 
   ListController.class_eval do
