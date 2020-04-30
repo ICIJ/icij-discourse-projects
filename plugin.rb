@@ -15,6 +15,142 @@ after_initialize do
     end
   end
 
+  class ::Guardian
+    def can_send_private_message?(target, notify_moderators: false)
+      is_user = target.is_a?(User)
+      is_group = target.is_a?(Group)
+
+      target_is_project_member = false
+      if is_user && !@user.nil?
+        group_ids = @user.groups.any? ? @user.groups.where(icij_group: true).pluck(:id) : []
+        project_members = User.icij_project_members(@user, group_ids)
+
+        target_is_project_member = project_members.include? target
+      end
+
+      target_is_project = false
+      if is_group && !@user.nil?
+        if is_staff?
+          target_is_project = @user.groups.include? target
+        else
+          target_is_project = @user.groups.where(icij_group: true).include? target
+        end
+      end
+
+      (is_group || is_user) &&
+      # User is authenticated
+      authenticated? &&
+      # Have to be a basic level at least
+      @user.has_trust_level?(SiteSetting.min_trust_to_send_messages) &&
+      # The target must be either a fellow project member, or the target must be a project that the user is a member of
+      (target.staff? || is_system? || target_is_project_member || target_is_project) &&
+      # User disabled private message
+      (is_staff? || is_group || target.user_option.allow_private_messages) &&
+      # PMs are enabled
+      (is_staff? || SiteSetting.enable_personal_messages || notify_moderators) &&
+      # Can't send PMs to suspended users
+      (is_staff? || is_group || !target.suspended?) &&
+      # Check group messageable level
+      (is_staff? || is_user || Group.messageable(@user).where(id: target.id).exists?) &&
+      # Silenced users can only send PM to staff
+      (!is_silenced? || target.staff?)
+    end
+  end
+
+  module ::UserGuardian
+    def can_see_profile?(user)
+      return false if user.blank?
+      return true if is_me?(user)
+
+      groups = @user.groups.reject { |group| !group.icij_group? }.pluck(:id)
+      group_users = GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
+
+      both_empty = @user.groups.empty? && user.groups.empty?
+
+      if !is_me?(user) && !@user.admin? && both_empty
+        return false
+      end
+
+      if !@user.admin? && !group_users.include?(user.id)
+        return false
+      end
+
+      # If a user has hidden their profile, restrict it to them and staff
+      if user.user_option.try(:hide_profile_and_presence?)
+        return is_me?(user) || is_staff?
+      end
+
+      true
+    end
+  end
+
+  module ::CategoryGuardian
+    # Creating Method
+    def can_create_category?(parent = nil)
+      true
+    end
+
+    # Editing Method
+    def can_edit_category?(category)
+      is_admin? || is_moderator? || (category.user_id == @user.id)
+    end
+
+    def can_delete_category?(category)
+      can_edit_category?(category) &&
+      category.topic_count <= 0 &&
+      !category.uncategorized? &&
+      !category.has_children?
+    end
+  end
+
+  module ::TopicGuardian
+    # Editing Method
+    def can_edit_topic?(topic)
+      return false if Discourse.static_doc_topic_ids.include?(topic.id) && !is_admin?
+      return false unless can_see?(topic)
+
+      return true if is_admin?
+      return true if is_moderator? && can_create_post?(topic)
+
+      # can't edit topics in secured categories where you don't have permission to create topics
+      # except for a tiny edge case where the topic is uncategorized and you are trying
+      # to fix it but uncategorized is disabled
+      if (
+        SiteSetting.allow_uncategorized_topics ||
+        topic.category_id != SiteSetting.uncategorized_category_id
+      )
+        return false if !can_create_topic_on_category?(topic.category)
+      end
+
+      # TL4 users can edit archived topics, but can not edit private messages
+      return true if (
+        SiteSetting.trusted_users_can_edit_others? &&
+        topic.archived &&
+        !topic.private_message? &&
+        user.has_trust_level?(TrustLevel[4]) &&
+        can_create_post?(topic)
+      )
+
+      # TL3 users can not edit archived topics and private messages
+      return true if (
+        SiteSetting.trusted_users_can_edit_others? &&
+        !topic.archived &&
+        !topic.private_message? &&
+        user.has_trust_level?(TrustLevel[3]) &&
+        can_create_post?(topic)
+      )
+
+      return false if topic.archived
+      is_my_own?(topic)
+    end
+
+    def can_delete_topic?(topic)
+      !topic.trashed? &&
+      (is_staff? || is_my_own?(topic)) &&
+      !(topic.is_category_topic?) &&
+      !Discourse.static_doc_topic_ids.include?(topic.id)
+    end
+  end
 
   class ::CurrentUserSerializer
     attributes :current_user_icij_projects,
