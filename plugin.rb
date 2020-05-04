@@ -251,6 +251,16 @@ after_initialize do
     end
   end
 
+  module ExtendGroupModel
+    def posts_for(guardian, opts = nil)
+      category_ids = categories.pluck(:id)
+      topic_ids = Topic.where(category_id: category_ids).pluck(:id)
+
+      result = super(guardian, opts = nil)
+      result.where(topic_id: topic_ids)
+    end
+  end
+
   class ::Group
     # this gathers all groups with icic_group: true, which means they were imported as projects by xemx
     scope :icij_projects, -> { where(icij_group: true) }
@@ -265,31 +275,10 @@ after_initialize do
       end
     }
 
-    # gets all the posts for a particular group -- used on the group activity tab
-    def posts_for(guardian, opts = nil)
-      opts ||= {}
-      category_ids = categories.pluck(:id)
-      topic_ids = Topic.where(category_id: category_ids).pluck(:id)
-      result = Post.joins(:topic, user: :groups, topic: :category)
-        .preload(:topic, user: :groups, topic: :category)
-        .references(:posts, :topics, :category)
-        .where(groups: { id: id })
-        .where('topics.archetype <> ?', Archetype.private_message)
-        .where('topics.visible')
-        .where(post_type: Post.types[:regular])
-        .where(topic_id: topic_ids)
-
-      if opts[:category_id].present?
-        result = result.where('topics.category_id = ?', opts[:category_id].to_i)
-      end
-
-      result = guardian.filter_allowed_categories(result)
-      result = result.where('posts.id < ?', opts[:before_post_id].to_i) if opts[:before_post_id]
-      result.order('posts.created_at desc')
-    end
+    prepend ExtendGroupModel
   end
 
-  class ::Search
+  module ExtendSearch
     def icij_group_members(user)
       if user.admin?
         user_ids = User.all.pluck(:id)
@@ -303,127 +292,14 @@ after_initialize do
 
     def posts_query(limit, opts = nil)
       user_ids = icij_group_members(@guardian.current_user)
-      opts ||= {}
-      posts = Post.where(user_id: user_ids)
-        .where(post_type: Topic.visible_post_types(@guardian.user))
-        .joins(:post_search_data, :topic)
-        .joins("LEFT JOIN categories ON categories.id = topics.category_id")
-        .where("topics.deleted_at" => nil)
+      posts = super(limit, opts = nil)
 
-      is_topic_search = @search_context.present? && @search_context.is_a?(Topic)
-
-      posts = posts.where("topics.visible") unless is_topic_search
-
-      if opts[:private_messages] || (is_topic_search && @search_context.private_message?)
-        posts = posts.where("topics.archetype =  ?", Archetype.private_message)
-
-         unless @guardian.is_admin?
-           posts = posts.private_posts_for_user(@guardian.user)
-         end
-      else
-        posts = posts.where("topics.archetype <> ?", Archetype.private_message)
-      end
-
-      if @term.present?
-        if is_topic_search
-
-          term_without_quote = @term
-          if @term =~ /"(.+)"/
-            term_without_quote = $1
-          end
-
-          if @term =~ /'(.+)'/
-            term_without_quote = $1
-          end
-
-          posts = posts.joins('JOIN users u ON u.id = posts.user_id')
-          posts = posts.where("posts.raw  || ' ' || u.username || ' ' || COALESCE(u.name, '') ilike ?", "%#{term_without_quote}%")
-        else
-          # A is for title
-          # B is for category
-          # C is for tags
-          # D is for cooked
-          weights = @in_title ? 'A' : (SiteSetting.tagging_enabled ? 'ABCD' : 'ABD')
-          posts = posts.where("post_search_data.search_data @@ #{ts_query(weight_filter: weights)}")
-          exact_terms = @term.scan(/"([^"]+)"/).flatten
-          exact_terms.each do |exact|
-            posts = posts.where("posts.raw ilike :exact OR topics.title ilike :exact", exact: "%#{exact}%")
-          end
-        end
-      end
-
-      @filters.each do |block, match|
-        if block.arity == 1
-          posts = instance_exec(posts, &block) || posts
-        else
-          posts = instance_exec(posts, match, &block) || posts
-        end
-      end if @filters
-
-      # If we have a search context, prioritize those posts first
-      if @search_context.present?
-
-        if @search_context.is_a?(User)
-
-          if opts[:private_messages]
-            posts = posts.private_posts_for_user(@search_context)
-          else
-            posts = posts.where("posts.user_id = #{@search_context.id}")
-          end
-
-        elsif @search_context.is_a?(Category)
-          category_ids = [@search_context.id] + Category.where(parent_category_id: @search_context.id).pluck(:id)
-          posts = posts.where("topics.category_id in (?)", category_ids)
-        elsif @search_context.is_a?(Topic)
-          posts = posts.where("topics.id = #{@search_context.id}")
-            .order("posts.post_number #{@order == :latest ? "DESC" : ""}")
-        end
-
-      end
-
-      if @order == :latest || (@term.blank? && !@order)
-        if opts[:aggregate_search]
-          posts = posts.order("MAX(posts.created_at) DESC")
-        else
-          posts = posts.reorder("posts.created_at DESC")
-        end
-      elsif @order == :latest_topic
-        if opts[:aggregate_search]
-          posts = posts.order("MAX(topics.created_at) DESC")
-        else
-          posts = posts.order("topics.created_at DESC")
-        end
-      elsif @order == :views
-        if opts[:aggregate_search]
-          posts = posts.order("MAX(topics.views) DESC")
-        else
-          posts = posts.order("topics.views DESC")
-        end
-      elsif @order == :likes
-        if opts[:aggregate_search]
-          posts = posts.order("MAX(posts.like_count) DESC")
-        else
-          posts = posts.order("posts.like_count DESC")
-        end
-      else
-        data_ranking = "TS_RANK_CD(post_search_data.search_data, #{ts_query})"
-        if opts[:aggregate_search]
-          posts = posts.order("MAX(#{data_ranking}) DESC")
-        else
-          posts = posts.order("#{data_ranking} DESC")
-        end
-        posts = posts.order("topics.bumped_at DESC")
-      end
-
-      if secure_category_ids.present?
-        posts = posts.where("(categories.id IS NULL) OR (NOT categories.read_restricted) OR (categories.id IN (?))", secure_category_ids).references(:categories)
-      else
-        posts = posts.where("(categories.id IS NULL) OR (NOT categories.read_restricted)").references(:categories)
-      end
-
-      posts = posts.offset(offset)
-      posts.limit(limit)
+      posts.where(user_id: user_ids)
     end
+  end
+
+  class ::Search
+    prepend ExtendSearch
   end
 
   class ::Site
@@ -520,6 +396,21 @@ after_initialize do
   add_to_serializer(:site, :fellow_icij_project_members) { object.fellow_icij_project_members }
   add_to_serializer(:site, :icij_project_categories) { object.icij_project_categories }
 
+  module TopicQueryExtension
+    def create_list(filter, options = {}, topics = nil)
+      topics ||= default_results(options)
+      topics = yield(topics) if block_given?
+
+      options = options.merge(@options)
+
+      if options[:exclude_category_ids]
+        topics = topics.where.not(category_id: options[:exclude_category_ids])
+      end
+
+      super(filter, options = {}, topics = topics)
+    end
+  end
+
   class ::TopicQuery
     def self.public_valid_options
       @public_valid_options ||=
@@ -545,54 +436,7 @@ after_initialize do
            no_tags)
     end
 
-    def create_list(filter, options = {}, topics = nil)
-      topics ||= default_results(options)
-      topics = yield(topics) if block_given?
-
-      options = options.merge(@options)
-
-
-      if options[:exclude_category_ids]
-        topics = topics.where.not(category_id: options[:exclude_category_ids])
-      end
-
-      if ["activity", "default"].include?(options[:order] || "activity") &&
-          !options[:unordered] &&
-          filter != :private_messages
-        topics = prioritize_pinned_topics(topics, options)
-      end
-
-      topics = topics.to_a
-
-      if options[:preload_posters]
-        user_ids = []
-        topics.each do |ft|
-          user_ids << ft.user_id << ft.last_post_user_id << ft.featured_user_ids << ft.allowed_user_ids
-        end
-
-        avatar_lookup = AvatarLookup.new(user_ids)
-        primary_group_lookup = PrimaryGroupLookup.new(user_ids)
-
-        # memoize for loop so we don't keep looking these up
-        translations = TopicPostersSummary.translations
-
-        topics.each do |t|
-          t.posters = t.posters_summary(
-            avatar_lookup: avatar_lookup,
-            primary_group_lookup: primary_group_lookup,
-            translations: translations
-          )
-        end
-      end
-
-      topics.each do |t|
-        t.allowed_user_ids = filter == :private_messages ? t.allowed_users.map { |u| u.id } : []
-      end
-
-      list = TopicList.new(filter, @user, topics, options.merge(@options))
-      list.per_page = options[:per_page] || per_page_setting
-      list
-    end
+    prepend TopicQueryExtension
   end
 
   ListController.class_eval do
