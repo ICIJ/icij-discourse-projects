@@ -290,11 +290,60 @@ after_initialize do
       end
     end
 
-    def posts_query(limit, opts = nil)
-      user_ids = icij_group_members(@guardian.current_user)
-      posts = super(limit, opts = nil)
+    #<Search::GroupedSearchResults:0x00007efd20a16638 @type_filter=nil, @term="franc", @search_context=nil, @include_blurbs=true, @blurb_length=200, @posts=[], @categories=[], @users=[], @tags=[], @groups=[], @error=nil, @search_log_id=132>
 
-      posts.where(user_id: user_ids)
+    def execute
+      super
+
+      unless !@results.search_context.nil?
+        user_country_search if @results.term.present?
+      end
+
+      if !@results.users.empty?
+        ids = icij_group_members(@guardian.user)
+        @results.users.reject! { |user| !ids.include?(user.id) }
+        @results
+      else
+        @results
+      end
+    end
+
+    def user_country_search
+      return if SiteSetting.hide_user_profiles_from_public && !@guardian.user
+
+      users = User.includes(:user_search_data)
+        .references(:user_search_data)
+        .where(active: true)
+        .where(staged: false)
+
+      if @guardian.current_user
+        if !@guardian.is_admin?
+          groups = @guardian.current_user.groups.reject { |group| !group.icij_group? }.pluck(:id)
+          group_users = GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
+          user_ids = group_users
+          user_ids
+
+          if !user_ids.empty?
+            users = users
+              .where(id: user_ids)
+              .where("country ILIKE ?", "%#{@original_term}%")
+              .order("CASE WHEN country = '#{@original_term}' THEN 0 ELSE 1 END")
+              .order("last_posted_at DESC")
+              .limit(limit)
+          else
+            users = []
+          end
+        else
+          users = users
+            .where("country ILIKE ?", "%#{@original_term}%")
+            .order("CASE WHEN country = '#{@original_term}' THEN 0 ELSE 1 END")
+            .order("last_posted_at DESC")
+            .limit(limit)
+        end
+        users.each do |user|
+          @results.add(user)
+        end
+      end
     end
   end
 
@@ -398,16 +447,16 @@ after_initialize do
 
   module TopicQueryExtension
     def create_list(filter, options = {}, topics = nil)
-      topics ||= default_results(options)
-      topics = yield(topics) if block_given?
-
-      options = options.merge(@options)
-
-      if options[:exclude_category_ids]
-        topics = topics.where.not(category_id: options[:exclude_category_ids])
+      list = super
+      if !@options[:exclude_category_ids].nil?
+        ids = @options[:exclude_category_ids]
+        topics = list.topics.select { |topic| !ids.include?(topic.category_id) }
+        list = TopicList.new(filter, @user, topics, options.merge(@options))
+        list.per_page = options[:per_page] || per_page_setting
+        list
+      else
+        list
       end
-
-      super(filter, options = {}, topics = topics)
     end
   end
 
