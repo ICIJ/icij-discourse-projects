@@ -19,6 +19,7 @@ export default Ember.Controller.extend({
   destroying: null,
   displayButtons: true,
   displayMessageDeleteButtons: false,
+  displayGroupPictures: true,
 
   @computed("showMessages", "model.group.user_count", "canManageGroup")
   icijTabs(showMessages, userCount, canManageGroup, icijGroups) {

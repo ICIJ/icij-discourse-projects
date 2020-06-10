@@ -1,0 +1,7 @@
+{{#discovery-categories refresh=(action "refresh")}}
+  {{component categoryPageStyle
+              categories=model.categories
+              latestTopicOnly=latestTopicOnly
+              displayGroupPictures=displayGroupPictures
+              topics=model.topics}}
+{{/discovery-categories}}

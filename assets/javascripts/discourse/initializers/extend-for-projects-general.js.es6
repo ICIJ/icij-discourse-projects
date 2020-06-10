@@ -26,6 +26,8 @@ import Category from "discourse/models/category";
 import Session from "discourse/models/session";
 import User from "discourse/models/user";
 import Topic from "discourse/models/topic";
+import CategoryTitleLink from "discourse/components/category-title-link";
+import DiscoveryCategoriesController from "discourse/controllers/discovery/categories";
 
 function initializePlugin(api) {
   api.reopenWidget("quick-access-panel", {
@@ -200,6 +202,9 @@ function initializePlugin(api) {
 
         showModal("edit-category", { model });
         this.controllerFor("edit-category").set("selectedTab", "general");
+        this.controllerFor("discovery/categories").setProperties({
+          displayGroupPictures: false
+        });
       }
     }
   })
@@ -254,6 +259,17 @@ export default {
   name: "extend-for-projects-general",
 
   initialize() {
+    CategoryTitleLink.reopen({
+      currentRouteHome: computed(function() {
+
+      }),
+
+      route () {
+        return Discourse.__container__.lookup("route:application");
+      }
+
+    }),
+
     EditCategoryGeneral.reopen({
       editingPermissions: false,
       selectedGroup: null,
@@ -274,6 +290,10 @@ export default {
 
     TopicController.reopen({
       showBottom: false,
+    }),
+
+    DiscoveryCategoriesController.reopen({
+      displayGroupPictures: null
     }),
 
     GroupController.reopen({
