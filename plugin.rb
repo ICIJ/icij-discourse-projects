@@ -157,9 +157,11 @@ after_initialize do
       # self.options[:scope].request.env["REQUEST_PATH"]
       # "/g/athena/categories"
       # extremely hack-y solution to get around loading the secure url in all contexts
-      path = self.options[:scope].request.env["REQUEST_PATH"]
-      unless path == "/" || path == "/categories"
-        Upload.signed_url_from_secure_media_url(object.url)
+      unless self.options[:scope].nil?
+        path = self.options[:scope].request.env["REQUEST_PATH"]
+        unless path == "/" || path == "/categories"
+          Upload.signed_url_from_secure_media_url(object.url)
+        end
       end
     end
   end
