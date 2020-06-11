@@ -152,20 +152,6 @@ after_initialize do
     end
   end
 
-  class ::CategoryUploadSerializer
-    def url
-      # self.options[:scope].request.env["REQUEST_PATH"]
-      # "/g/athena/categories"
-      # extremely hack-y solution to get around loading the secure url in all contexts
-      unless self.options[:scope].nil?
-        path = self.options[:scope].request.env["REQUEST_PATH"]
-        unless path == "/" || path == "/categories"
-          Upload.signed_url_from_secure_media_url(object.url)
-        end
-      end
-    end
-  end
-
   class ::CurrentUserSerializer
     attributes :current_user_icij_projects,
                :fellow_icij_project_members,
