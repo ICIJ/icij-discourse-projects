@@ -262,6 +262,7 @@ after_initialize do
   end
 
   class ::Group
+    prepend ExtendGroupModel
     # this gathers all groups with icic_group: true, which means they were imported as projects by xemx
     scope :icij_projects, -> { where(icij_group: true) }
 
@@ -275,7 +276,30 @@ after_initialize do
       end
     }
 
-    prepend ExtendGroupModel
+    scope :visible_icij_groups, Proc.new { |user, order, opts|
+      groups = self.order(order || "name ASC")
+
+      if !opts || !opts[:include_everyone]
+        groups = groups.where("groups.id > 0")
+      end
+
+        sql = <<~SQL
+          groups.id IN (
+
+            SELECT g.id
+              FROM groups g
+              JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
+             WHERE gu.user_id = :user_id
+              AND  g.icij_group = true
+
+          )
+        SQL
+
+        params = { user_id: user&.id }
+        groups = groups.where(sql, params)
+
+      groups
+    }
   end
 
   module ExtendSearch
@@ -535,7 +559,26 @@ after_initialize do
     end
   end
 
-  GroupsController.class_eval do
+  module ExtendGroupsController
+    def search
+      groups = Group.visible_icij_groups(current_user)
+        .order(:name)
+
+      if (term = params[:term]).present?
+        groups = groups.where("name ILIKE :term OR full_name ILIKE :term", term: "%#{term}%")
+      end
+
+      if params[:ignore_automatic].to_s == "true"
+        groups = groups.where(automatic: false)
+      end
+
+      if Group.preloaded_custom_field_names.present?
+        Group.preload_custom_fields(groups, Group.preloaded_custom_field_names)
+      end
+
+      render_serialized(groups, BasicGroupSerializer)
+    end
+
     def index
       type_filters_icij = {
         my: Proc.new { |groups, user|
@@ -703,6 +746,10 @@ after_initialize do
         lists: serialize_data(result, CategoryAndTopicListsSerializer, root: false)
       )
     end
+  end
+
+  class ::GroupsController
+    prepend ExtendGroupsController
   end
 
   Discourse::Application.routes.append do
