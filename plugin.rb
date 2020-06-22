@@ -373,6 +373,16 @@ after_initialize do
 
   class ::Search
     prepend ExtendSearch
+
+    # an ICIJ customization that will have to be moved to plugin
+    advanced_filter(/^group:(.+)$/) do |posts, match|
+      group_id = Group.where('name ilike ? OR (id = ? AND id > 0)', match, match.to_i).pluck_first(:id)
+      if group_id
+        posts.joins(:topic).where("topics.category_id IN (select cg.category_id from category_groups cg where cg.group_id = ?)", group_id)
+      else
+        posts.where("1 = 0")
+      end
+    end
   end
 
   class ::Site
