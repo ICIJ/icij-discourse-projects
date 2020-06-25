@@ -152,24 +152,50 @@ after_initialize do
     end
   end
 
+  class ::User
+    scope :members_visible_icij_groups, Proc.new { |user, order, opts|
+      if user.nil?
+        []
+      else
+        users = self.human_users
+
+        sql = <<~SQL
+          users.id IN (
+            SELECT gu.user_id
+            FROM group_users gu
+            WHERE gu.group_id in (
+              SELECT g.id
+              FROM groups g
+              JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
+              WHERE gu.user_id = :user_id
+              AND  g.icij_group = true
+             )
+          )
+          SQL
+
+          params = { user_id: user&.id }
+
+          users = self.where(sql, params)
+          users
+        end
+    }
+  end
+
   class ::CurrentUserSerializer
     attributes :current_user_icij_projects,
                :fellow_icij_project_members,
                :icij_project_categories
 
    def icij_project_categories
-     groups = object.visible_groups.where(icij_group: true).pluck(:id)
-     category_ids = CategoryGroup.where(group_id: groups).pluck(:category_id)
-     Category.where(id: category_ids).pluck(:id)
+     Category.visible_icij_groups_categories(object).pluck(:id)
    end
 
     def current_user_icij_projects
-      object.visible_groups.where(icij_group: true).pluck(:id, :name).map { |id, name| { id: id, name: name } }
+      Group.visible_icij_groups(object).pluck(:id, :name).map { |id, name| { id: id, name: name } }
     end
 
     def fellow_icij_project_members
-      groups = object.visible_groups.where(icij_group: true).pluck(:id)
-      GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
+      User.members_visible_icij_groups(object).pluck(:id)
     end
   end
 
@@ -303,17 +329,6 @@ after_initialize do
   end
 
   module ExtendSearch
-    def icij_group_members(user)
-      if user.admin?
-        user_ids = User.all.pluck(:id)
-        user_ids
-      else
-        group_ids = user.groups.where(icij_group: true).pluck(:id) + [0]
-        user_ids = GroupUser.where(group_id: group_ids).pluck(:user_id).uniq
-        user_ids
-      end
-    end
-
     #<Search::GroupedSearchResults:0x00007efd20a16638 @type_filter=nil, @term="franc", @search_context=nil, @include_blurbs=true, @blurb_length=200, @posts=[], @categories=[], @users=[], @tags=[], @groups=[], @error=nil, @search_log_id=132>
 
     def execute
@@ -324,7 +339,7 @@ after_initialize do
       end
 
       if !@results.users.empty?
-        ids = icij_group_members(@guardian.user)
+        ids = User.members_visible_icij_groups(@guardian.user).pluck(:id)
         @results.users.reject! { |user| !ids.include?(user.id) }
         @results
       else
@@ -342,9 +357,7 @@ after_initialize do
 
       if @guardian.current_user
         if !@guardian.is_admin?
-          groups = @guardian.current_user.groups.reject { |group| !group.icij_group? }.pluck(:id)
-          group_users = GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
-          user_ids = group_users
+          user_ids = User.members_visible_icij_groups(@guardian.current_user).pluck(:id)
           user_ids
 
           if !user_ids.empty?
@@ -374,7 +387,7 @@ after_initialize do
   class ::Search
     prepend ExtendSearch
 
-    # an ICIJ customization that will have to be moved to plugin
+    # an ICIJ customization
     advanced_filter(/^group:(.+)$/) do |posts, match|
       group_id = Group.where('name ilike ? OR (id = ? AND id > 0)', match, match.to_i).pluck_first(:id)
       if group_id
@@ -386,12 +399,6 @@ after_initialize do
   end
 
   class ::Site
-    # groups the project names in a simple array for easy use in later manipulations
-    def icij_project_names
-      user = self.determine_user
-      Group.icij_projects_get(user).pluck(:name)
-    end
-
     def determine_user
       if @guardian.nil?
         user = current_user
@@ -402,47 +409,54 @@ after_initialize do
       end
     end
 
-    def fellow_icij_project_members
-      user = self.determine_user
-      if user.nil?
-        []
-      else
-        groups = Group.icij_projects_get(user).pluck(:id)
-        GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
-      end
-    end
-
     # maps the projects available to the current user in a simple obejct available for assigning group permissions
     def available_icij_projects
       user = self.determine_user
-      Group.icij_projects_get(user).pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
-    end
-
-    # all the categories for icij projects (use for filtering)
-    def icij_project_categories
-      user = self.determine_user
-
-      group_ids = Group.icij_projects_get(user).pluck(:id)
-      category_ids = CategoryGroup.where(group_id: group_ids).pluck(:category_id)
-      (Category.where(id: category_ids).pluck(:id))
+      Group.visible_icij_groups(user).pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
     end
   end
 
+  add_to_serializer(:site, :available_icij_projects) { object.available_icij_projects }
+
   class ::Category
+    scope :visible_icij_groups_categories, Proc.new { |user, order, opts|
+      if user.nil?
+        []
+      else
+        categories = self.all
+
+        sql = <<~SQL
+          categories.id IN (
+            SELECT cg.category_id
+            FROM category_groups cg
+            WHERE cg.group_id in (
+              SELECT g.id
+              FROM groups g
+              JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
+              WHERE gu.user_id = :user_id
+              AND  g.icij_group = true
+            )
+          )
+        SQL
+
+        params = { user_id: user&.id }
+
+        categories = self.where(sql, params)
+        categories
+      end
+    }
+
     def icij_projects_for_category
       if self.category_groups.nil?
         []
       else
-        groups = self.category_groups.pluck(:group_id)
-        Group.where(id: groups).pluck(:name)
+        Group.where(id: self.category_groups.pluck(:group_id)).pluck(:name)
       end
     end
 
     def icij_project_subcategories_for_category
       if self.parent_category_id
-        parent_category = Category.find(self.parent_category_id)
-        groups = parent_category.category_groups.pluck(:group_id)
-        Group.where(id: groups).pluck(:name)
+        Group.where(id: self.parent_category.category_groups.pluck(:group_id)).pluck(:name)
       else
         []
       end
@@ -450,10 +464,10 @@ after_initialize do
 
     def icij_project_permissions_for_category
       perms = self.category_groups.joins(:group).includes(:group).order("groups.name").map do |cg|
-        {
-          permission_type: cg.permission_type,
-          group_name: cg.group.name
-        }
+          {
+            permission_type: cg.permission_type,
+            group_name: cg.group.name
+          }
       end
       if perms.length == 0 && !self.read_restricted
         perms << { permission_type: CategoryGroup.permission_types[:full], group_name: Group[:everyone]&.name.presence || :everyone }
@@ -462,22 +476,17 @@ after_initialize do
     end
   end
 
-  add_to_serializer(:basic_category, :icij_projects_for_category) { object.icij_projects_for_category }
-  add_to_serializer(:basic_category, :icij_project_subcategories_for_category) { object.icij_project_subcategories_for_category }
-  add_to_serializer(:basic_category, :icij_project_permissions_for_category) { object.icij_project_permissions_for_category }
-
   class ::CategorySerializer
     def available_groups
       user = scope && scope.user
-      groups = Group.order(:name).icij_projects_get(user)
+      groups = Group.visible_icij_groups(user).order(:name)
       groups.pluck(:name) - group_permissions.map { |g| g[:group_name] }
     end
   end
 
-  add_to_serializer(:site, :icij_project_names) { object.icij_project_names }
-  add_to_serializer(:site, :available_icij_projects) { object.available_icij_projects }
-  add_to_serializer(:site, :fellow_icij_project_members) { object.fellow_icij_project_members }
-  add_to_serializer(:site, :icij_project_categories) { object.icij_project_categories }
+  add_to_serializer(:basic_category, :icij_projects_for_category) { object.icij_projects_for_category }
+  add_to_serializer(:basic_category, :icij_project_subcategories_for_category) { object.icij_project_subcategories_for_category }
+  add_to_serializer(:basic_category, :icij_project_permissions_for_category) { object.icij_project_permissions_for_category }
 
   module TopicQueryExtension
     def create_list(filter, options = {}, topics = nil)
@@ -547,7 +556,7 @@ after_initialize do
         return render_json_error(@category)
       end
 
-      icij_groups = Group.icij_projects_get(current_user).pluck(:name)
+      icij_groups = Group.visible_icij_groups(current_user).pluck(:name)
       has_permission = icij_groups.any? { |group| (params[:permissions].keys).include? group }
 
       unless has_permission
@@ -621,7 +630,7 @@ after_initialize do
       page = params[:page]&.to_i || 0
       order = %w{name user_count}.delete(params[:order])
       dir = params[:asc] ? 'ASC' : 'DESC'
-      groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).icij_projects_get(current_user)
+      groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).visible_icij_groups(current_user)
 
       if (filter = params[:filter]).present?
         groups = Group.search_groups(filter, groups: groups)
@@ -699,7 +708,7 @@ after_initialize do
 
         format.json do
           groups = Group.visible_groups(current_user)
-          icij_groups = Group.icij_projects_get(current_user)
+          icij_groups = Group.visible_icij_groups(current_user)
 
           if !guardian.is_staff?
             groups = groups.where(automatic: false)
