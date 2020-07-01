@@ -292,16 +292,6 @@ after_initialize do
     # this gathers all groups with icic_group: true, which means they were imported as projects by xemx
     scope :icij_projects, -> { where(icij_group: true) }
 
-    # this gathers all the icij projects accessible to the current user
-    scope :icij_projects_get, Proc.new { |user|
-      if user.nil?
-        []
-      else
-        group_ids = user.groups.reject { |group| !group.icij_group? }.pluck(:id)
-        Group.where(id: group_ids)
-      end
-    }
-
     scope :visible_icij_groups, Proc.new { |user, order, opts|
       groups = self.order(order || "name ASC")
 
@@ -539,7 +529,7 @@ after_initialize do
     end
   end
 
-  CategoriesController.class_eval do
+  module ExtendCategoriesController
     def create
       guardian.ensure_can_create!(Category)
       position = category_params.delete(:position)
@@ -576,6 +566,10 @@ after_initialize do
         return render_json_error(@category) unless @category.save
       end
     end
+  end
+
+  class ::CategoriesController
+    prepend ExtendCategoriesController
   end
 
   module ExtendGroupsController
