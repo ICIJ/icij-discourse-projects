@@ -13,7 +13,7 @@ describe Group do
     end
   end
 
-  context "getting icij projects for a specific user" do
+  context "getting icij projects for a specific user using visible_icij_groups" do
     it "returns icij_projects for a given user" do
       icij_group = Fabricate(:icij_group)
       other_icij_group = Fabricate(:icij_group, name: "other-icij-project")
@@ -26,8 +26,8 @@ describe Group do
 
       icij_group.add(other_user)
 
-      expect(Group.icij_projects_get(user).count).to eq(2)
-      expect(Group.icij_projects_get(other_user).count).to eq(1)
+      expect(Group.visible_icij_groups(user).count).to eq(2)
+      expect(Group.visible_icij_groups(other_user).count).to eq(1)
 
       expect(icij_group.users.count).to eq(2)
       expect(other_icij_group.users.count).to eq(1)
@@ -35,7 +35,7 @@ describe Group do
 
     it "returns an empty array for a nil user" do
       user = nil
-      expect(Group.icij_projects_get(user).count).to eq(0)
+      expect(Group.visible_icij_groups(user).count).to eq(0)
     end
   end
 

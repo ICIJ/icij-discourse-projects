@@ -20,11 +20,11 @@ RSpec.describe TopicsController do
       let!(:post) { Fabricate(:post, topic: topic, user: user, post_number: 1) }
 
       describe 'without moderator status' do
-        # it "succeeds because normal user has permission to delete the topic" do
-        #   sign_in(user)
-        #   delete "/t/#{topic.id}.json"
-        #   expect(response.status).to eq(200)
-        # end
+        it "succeeds because normal user has permission to delete the topic" do
+          sign_in(user)
+          delete "/t/#{topic.id}.json"
+          expect(response.status).to eq(200)
+        end
       end
 
       describe 'with moderator status' do

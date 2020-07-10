@@ -7,21 +7,21 @@ describe UsersController do
   let(:user) { Fabricate(:user) }
 
   describe '#summary' do
-    # it "returns a 404 for summary, as the summary page contains gratuitous information" do
-    #   user = Fabricate(:user)
-    #   create_post(user: user)
-    #
-    #   get "/u/#{user.username_lower}/summary.json"
-    #   expect(response.status).to eq(404)
-    # end
-    #
-    # it "returns 404 for a hidden profile" do
-    #   user = Fabricate(:user)
-    #   user.user_option.update_column(:hide_profile_and_presence, true)
-    #
-    #   get "/u/#{user.username_lower}/summary.json"
-    #   expect(response.status).to eq(404)
-    # end
+    it "returns a 404 for summary, as the summary page contains gratuitous information" do
+      user = Fabricate(:user)
+      create_post(user: user)
+
+      get "/u/#{user.username_lower}/summary.json"
+      expect(response.status).to eq(404)
+    end
+
+    it "returns 404 for a hidden profile" do
+      user = Fabricate(:user)
+      user.user_option.update_column(:hide_profile_and_presence, true)
+
+      get "/u/#{user.username_lower}/summary.json"
+      expect(response.status).to eq(404)
+    end
   end
 
 
@@ -121,22 +121,6 @@ describe UsersController do
         it "skips tracking" do
           UserProfileView.expects(:add).never
           get "/u/#{user.username}.json", params: { skip_track_visit: true }
-        end
-      end
-
-      context "fetching a user by external_id" do
-        before { user.create_single_sign_on_record(external_id: '997', last_payload: '') }
-
-        # commenting out because i have no idea what this is, even? what is an external id?
-        # it "returns not found because the user in question is not part of the logged-in users ICIJ projects" do
-        #   get "/u/by-external/997.json"
-        #   expect(response.status).to eq(404)
-        #   expect(response).not_to be_successful
-        # end
-
-        it "returns not found when external_id doesn't match" do
-          get "/u/by-external/99.json"
-          expect(response).not_to be_successful
         end
       end
 

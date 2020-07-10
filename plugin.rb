@@ -22,8 +22,7 @@ after_initialize do
 
       target_is_project_member = false
       if is_user && !@user.nil?
-        group_ids = @user.groups.any? ? @user.groups.where(icij_group: true).pluck(:id) : []
-        project_members = User.icij_project_members(@user, group_ids)
+        project_members = User.members_visible_icij_groups(@user)
 
         target_is_project_member = project_members.include? target
       end
@@ -62,8 +61,7 @@ after_initialize do
       return false if user.blank?
       return true if is_me?(user)
 
-      groups = @user.groups.reject { |group| !group.icij_group? }.pluck(:id)
-      group_users = GroupUser.where(group_id: groups).pluck(:user_id).uniq.reject { |id| id < 0 }
+      group_users = User.members_visible_icij_groups(@user).pluck(:id)
 
       both_empty = @user.groups.empty? && user.groups.empty?
 
@@ -388,7 +386,7 @@ after_initialize do
     end
   end
 
-  class ::Site
+  module ExtendSiteModel
     def determine_user
       if @guardian.nil?
         user = current_user
@@ -404,6 +402,10 @@ after_initialize do
       user = self.determine_user
       Group.visible_icij_groups(user).pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
     end
+  end
+
+  class ::Site
+    prepend ExtendSiteModel
   end
 
   add_to_serializer(:site, :available_icij_projects) { object.available_icij_projects }
