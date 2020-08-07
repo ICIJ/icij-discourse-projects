@@ -49,12 +49,11 @@ function initializePlugin(api) {
     const icijProjectCategories = Category.listIcijProjectCategories();
     const container = Discourse.__container__;
     const route = container.lookup("route:application");
-    const isGroupRoute = route.controller.currentRouteName.indexOf('group.') === 0
     const discoveryRouteName = route.controller.currentRouteName;
 
-    let discoveryRoutesToCheck = ["discovery.categoryNone", "discovery.latestParentCategory", "discovery.topParentCategory", "discovery.newParentCategory", "discovery.unreadParentCategory", "discovery.parentCategory", "discovery.category"]
+    let discoveryRoutesToCheck = ["discovery.categoryNone", "discovery.latestParentCategory", "discovery.topParentCategory", "discovery.newParentCategory", "discovery.unreadParentCategory", "discovery.parentCategory", "discovery.category", "discovery.categoryWithID"]
 
-    if (isGroupRoute) {
+    if (discoveryRouteName.indexOf('group.') === 0) {
       let groupName = route.controllerFor('group').get('model.name');
       let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === groupName)))
       return categories
@@ -79,11 +78,11 @@ function initializePlugin(api) {
 
     let groupName = route.controllerFor('discovery').get('category.icij_projects_for_category') || []
 
-    let discoveryRoutesToCheck = ["discovery.categoryNone", "discovery.latestParentCategory", "discovery.topParentCategory", "discovery.newParentCategory", "discovery.unreadParentCategory", "discovery.parentCategory", "discovery.category"]
+    let discoveryRoutesToCheck = ["discovery.categoryNone", "discovery.latestParentCategory", "discovery.topParentCategory", "discovery.newParentCategory", "discovery.unreadParentCategory", "discovery.parentCategory", "discovery.category", "discovery.categoryWithID"]
 
     if (discoveryRoutesToCheck.includes(discoveryRouteName)) {
       return existingContent.filter(c => {
-        if (c.id !== "all-categories") {
+        if ((c.id !== "all-categories") && (c.id !== "no-categories")) {
           return (c.icij_projects_for_category[0] === groupName[0])
         }
       });
