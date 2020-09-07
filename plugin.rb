@@ -15,7 +15,7 @@ after_initialize do
     end
   end
 
-  class ::Guardian
+  module ExtendGuardian
     def can_send_private_message?(target, notify_moderators: false)
       is_user = target.is_a?(User)
       is_group = target.is_a?(Group)
@@ -56,7 +56,11 @@ after_initialize do
     end
   end
 
-  module ::UserGuardian
+  class ::Guardian
+    prepend ExtendGuardian
+  end
+
+  ::UserGuardian.module_eval do
     def can_see_profile?(user)
       return false if user.blank?
       return true if is_me?(user)
@@ -82,7 +86,7 @@ after_initialize do
     end
   end
 
-  module ::CategoryGuardian
+  ::CategoryGuardian.module_eval do
     # Creating Method
     def can_create_category?(parent = nil)
       true
@@ -101,7 +105,7 @@ after_initialize do
     end
   end
 
-  module ::TopicGuardian
+  ::TopicGuardian.module_eval do
     # Editing Method
     def can_edit_topic?(topic)
       return false if Discourse.static_doc_topic_ids.include?(topic.id) && !is_admin?
@@ -150,8 +154,8 @@ after_initialize do
     end
   end
 
-  class ::User
-    scope :members_visible_icij_groups, Proc.new { |user, order, opts|
+  module ::ExtendUser
+    def members_visible_icij_groups(user)
       if user.nil?
         []
       else
@@ -176,28 +180,18 @@ after_initialize do
           users = self.where(sql, params)
           users
         end
-    }
-  end
-
-  class ::CurrentUserSerializer
-    attributes :current_user_icij_projects,
-               :fellow_icij_project_members,
-               :icij_project_categories
-
-   def icij_project_categories
-     Category.visible_icij_groups_categories(object).pluck(:id)
-   end
-
-    def current_user_icij_projects
-      Group.visible_icij_groups(object).pluck(:id, :name).map { |id, name| { id: id, name: name } }
-    end
-
-    def fellow_icij_project_members
-      User.members_visible_icij_groups(object).pluck(:id)
     end
   end
 
-  class ::CategoryList
+  class ::User
+    extend ExtendUser
+  end
+
+  add_to_serializer(:current_user, :current_user_icij_projects) { Group.visible_icij_groups(object).pluck(:id, :name).map { |id, name| { id: id, name: name } } }
+  add_to_serializer(:current_user, :fellow_icij_project_members) { User.members_visible_icij_groups(object).pluck(:id) }
+  add_to_serializer(:current_user, :icij_project_categories) { Category.visible_icij_groups_categories(object).pluck(:id) }
+
+  module ExtendCategoryList
     def find_group(group_name, ensure_can_see: true)
       group = Group
       group = group.find_by("lower(name) = ?", group_name.downcase)
@@ -275,7 +269,11 @@ after_initialize do
     end
   end
 
-  module ExtendGroupModel
+  class ::CategoryList
+    prepend ExtendCategoryList
+  end
+
+  module ExtendGroupInstance
     def posts_for(guardian, opts = nil)
       category_ids = categories.pluck(:id)
       topic_ids = Topic.where(category_id: category_ids).pluck(:id)
@@ -285,40 +283,43 @@ after_initialize do
     end
   end
 
-  class ::Group
-    prepend ExtendGroupModel
-    # this gathers all groups with icic_group: true, which means they were imported as projects by xemx
-    scope :icij_projects, -> { where(icij_group: true) }
+  module ExtendGroupClass
+    def icij_projects
+      self.where(icij_group: true)
+    end
 
-    scope :visible_icij_groups, Proc.new { |user, order, opts|
-      groups = self.order(order || "name ASC")
+    def visible_icij_groups(user)
+      groups = self.order("name ASC")
 
-      if !opts || !opts[:include_everyone]
-        groups = groups.where("groups.id > 0")
-      end
 
-        sql = <<~SQL
-          groups.id IN (
+      groups = groups.where("groups.id > 0")
 
-            SELECT g.id
-              FROM groups g
-              JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
-             WHERE gu.user_id = :user_id
-              AND  g.icij_group = true
+      sql = <<~SQL
+        groups.id IN (
 
-          )
-        SQL
+          SELECT g.id
+            FROM groups g
+            JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
+           WHERE gu.user_id = :user_id
+            AND  g.icij_group = true
 
-        params = { user_id: user&.id }
-        groups = groups.where(sql, params)
+        )
+      SQL
+
+      params = { user_id: user&.id }
+      groups = groups.where(sql, params)
 
       groups
-    }
+    end
+  end
+
+  class ::Group
+    prepend ExtendGroupInstance
+    extend ExtendGroupClass
   end
 
   module ExtendSearch
     #<Search::GroupedSearchResults:0x00007efd20a16638 @type_filter=nil, @term="franc", @search_context=nil, @include_blurbs=true, @blurb_length=200, @posts=[], @categories=[], @users=[], @tags=[], @groups=[], @error=nil, @search_log_id=132>
-
     def execute
       super
 
@@ -410,8 +411,8 @@ after_initialize do
 
   add_to_serializer(:site, :available_icij_projects) { object.available_icij_projects }
 
-  class ::Category
-    scope :visible_icij_groups_categories, Proc.new { |user, order, opts|
+  module ExtendCategoryClass
+    def visible_icij_groups_categories(user)
       if user.nil?
         []
       else
@@ -436,8 +437,10 @@ after_initialize do
         categories = self.where(sql, params)
         categories
       end
-    }
+    end
+  end
 
+  module ExtendCategoryInstance
     def icij_projects_for_category
       if self.category_groups.nil?
         []
@@ -468,12 +471,15 @@ after_initialize do
     end
   end
 
-  class ::CategorySerializer
-    def available_groups
-      user = scope && scope.user
-      groups = Group.visible_icij_groups(user).order(:name)
-      groups.pluck(:name) - group_permissions.map { |g| g[:group_name] }
-    end
+  class ::Category
+    prepend ExtendCategoryInstance
+    extend ExtendCategoryClass
+  end
+
+  add_to_serializer(:category, :available_groups) do
+    user = scope && scope.user
+    groups = Group.visible_icij_groups(user).order(:name)
+    groups.pluck(:name) - group_permissions.map { |g| g[:group_name] }
   end
 
   add_to_serializer(:basic_category, :icij_projects_for_category) { object.icij_projects_for_category }
@@ -573,6 +579,8 @@ after_initialize do
   class ::CategoriesController
     prepend ExtendCategoriesController
   end
+
+  # GroupsController.ancestors
 
   module ExtendGroupsController
     def search
@@ -726,16 +734,13 @@ after_initialize do
 
     def categories
       group = find_group(:group_id)
-      name = group.name
 
       category_options = {
-        group_name: name,
+        group_name: group.name,
         include_topics: false
       }
 
-      categories = group.categories.all
-      category_ids = categories.pluck(:id)
-      ids_to_exclude = Category.where.not(id: category_ids).pluck(:id)
+      ids_to_exclude = Category.where.not(id: group.categories.pluck(:id)).pluck(:id)
 
       topic_options = {
         per_page: SiteSetting.categories_topics,
