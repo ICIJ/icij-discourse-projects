@@ -393,6 +393,7 @@ en:
       country: "Country"
       last_seen: "Last Seen"
       created_at: "Created At"
+      filter_any: "Filter"
       filter_name: "filter by username"
       title: "Users"
       likes_given: "Given"
