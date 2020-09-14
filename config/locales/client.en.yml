@@ -389,6 +389,7 @@ en:
       sent_by_you: "Sent by <a href='{{userUrl}}'>you</a>"
 
     directory:
+      organization: "Organization"
       country: "Country"
       last_seen: "Last Seen"
       created_at: "Created At"
