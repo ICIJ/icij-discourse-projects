@@ -7,6 +7,7 @@ register_asset 'stylesheets/common/select-kit/category-chooser.scss'
 PLUGIN_NAME = 'icij_discourse_projects'.freeze
 
 after_initialize do
+  User.register_custom_field_type("organization", :string)
 
   module ::IcijDiscourseProjects
     class Engine < ::Rails::Engine
@@ -15,49 +16,43 @@ after_initialize do
     end
   end
 
-  module ExtendGuardian
-    def can_send_private_message?(target, notify_moderators: false)
-      is_user = target.is_a?(User)
-      is_group = target.is_a?(Group)
+  add_to_class(:Guardian, :can_send_private_message?) do |target, notify_moderators: false|
+    is_user = target.is_a?(User)
+    is_group = target.is_a?(Group)
 
-      target_is_project_member = false
-      if is_user && !@user.nil?
-        project_members = User.members_visible_icij_groups(@user)
+    target_is_project_member = false
+    if is_user && !@user.nil?
+      project_members = User.members_visible_icij_groups(@user)
 
-        target_is_project_member = project_members.include? target
-      end
-
-      target_is_project = false
-      if is_group && !@user.nil?
-        if is_staff?
-          target_is_project = @user.groups.include? target
-        else
-          target_is_project = @user.groups.where(icij_group: true).include? target
-        end
-      end
-
-      (is_group || is_user) &&
-      # User is authenticated
-      authenticated? &&
-      # Have to be a basic level at least
-      @user.has_trust_level?(SiteSetting.min_trust_to_send_messages) &&
-      # The target must be either a fellow project member, or the target must be a project that the user is a member of
-      (target.staff? || is_system? || target_is_project_member || target_is_project) &&
-      # User disabled private message
-      (is_staff? || is_group || target.user_option.allow_private_messages) &&
-      # PMs are enabled
-      (is_staff? || SiteSetting.enable_personal_messages || notify_moderators) &&
-      # Can't send PMs to suspended users
-      (is_staff? || is_group || !target.suspended?) &&
-      # Check group messageable level
-      (is_staff? || is_user || Group.messageable(@user).where(id: target.id).exists?) &&
-      # Silenced users can only send PM to staff
-      (!is_silenced? || target.staff?)
+      target_is_project_member = project_members.include? target
     end
-  end
 
-  class ::Guardian
-    prepend ExtendGuardian
+    target_is_project = false
+    if is_group && !@user.nil?
+      if is_staff?
+        target_is_project = @user.groups.include? target
+      else
+        target_is_project = @user.groups.where(icij_group: true).include? target
+      end
+    end
+
+    (is_group || is_user) &&
+    # User is authenticated
+    authenticated? &&
+    # Have to be a basic level at least
+    @user.has_trust_level?(SiteSetting.min_trust_to_send_messages) &&
+    # The target must be either a fellow project member, or the target must be a project that the user is a member of
+    (target.staff? || is_system? || target_is_project_member || target_is_project) &&
+    # User disabled private message
+    (is_staff? || is_group || target.user_option.allow_private_messages) &&
+    # PMs are enabled
+    (is_staff? || SiteSetting.enable_personal_messages || notify_moderators) &&
+    # Can't send PMs to suspended users
+    (is_staff? || is_group || !target.suspended?) &&
+    # Check group messageable level
+    (is_staff? || is_user || Group.messageable(@user).where(id: target.id).exists?) &&
+    # Silenced users can only send PM to staff
+    (!is_silenced? || target.staff?)
   end
 
   ::UserGuardian.module_eval do
@@ -154,114 +149,106 @@ after_initialize do
     end
   end
 
-  module ::ExtendUser
-    def members_visible_icij_groups(user)
-      if user.nil?
-        []
-      else
-        users = self.human_users
+  add_class_method(:User, :members_visible_icij_groups) do |user|
+    if user.nil?
+      []
+    else
+      users = self.human_users
 
-        sql = <<~SQL
-          users.id IN (
-            SELECT gu.user_id
-            FROM group_users gu
-            WHERE gu.group_id in (
-              SELECT g.id
-              FROM groups g
-              JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
-              WHERE gu.user_id = :user_id
-              AND  g.icij_group = true
-             )
-          )
-          SQL
+      sql = <<~SQL
+        users.id IN (
+          SELECT gu.user_id
+          FROM group_users gu
+          WHERE gu.group_id in (
+            SELECT g.id
+            FROM groups g
+            JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
+            WHERE gu.user_id = :user_id
+            AND  g.icij_group = true
+           )
+        )
+        SQL
 
-          params = { user_id: user&.id }
+      params = { user_id: user&.id }
 
-          users = self.where(sql, params)
-          users
-        end
+      users = self.where(sql, params)
+      users
     end
-  end
-
-  class ::User
-    extend ExtendUser
   end
 
   add_to_serializer(:current_user, :current_user_icij_projects) { Group.visible_icij_groups(object).pluck(:id, :name).map { |id, name| { id: id, name: name } } }
   add_to_serializer(:current_user, :fellow_icij_project_members) { User.members_visible_icij_groups(object).pluck(:id) }
   add_to_serializer(:current_user, :icij_project_categories) { Category.visible_icij_groups_categories(object).pluck(:id) }
 
-  module ExtendCategoryList
-    def find_group(group_name, ensure_can_see: true)
-      group = Group
-      group = group.find_by("lower(name) = ?", group_name.downcase)
-      @guardian.ensure_can_see!(group) if ensure_can_see
-      group
+  add_to_class(:CategoryList, :find_group) do |group_name, ensure_can_see: true|
+    group = Group
+    group = group.find_by("lower(name) = ?", group_name.downcase)
+    @guardian.ensure_can_see!(group) if ensure_can_see
+    group
+  end
+
+  add_to_class(:CategoryList, :find_categories) do
+    @categories = Category.includes(
+      :uploaded_background,
+      :uploaded_logo,
+      :topic_only_relative_url,
+      subcategories: [:topic_only_relative_url]
+    ).secured(@guardian)
+
+    @categories = @categories.where("categories.parent_category_id = ?", @options[:parent_category_id].to_i) if @options[:parent_category_id].present?
+
+    if @options[:group_name].present?
+      group = find_group(@options[:group_name])
+      @categories = group.categories.all
     end
 
-    def find_categories
-      @categories = Category.includes(
-        :uploaded_background,
-        :uploaded_logo,
-        :topic_only_relative_url,
-        subcategories: [:topic_only_relative_url]
-      ).secured(@guardian)
+    if SiteSetting.fixed_category_positions
+      @categories = @categories.order(:position, :id)
+    else
+      @categories = @categories.order('name ASC')
+    end
 
-      @categories = @categories.where("categories.parent_category_id = ?", @options[:parent_category_id].to_i) if @options[:parent_category_id].present?
+    @categories = @categories.to_a
 
-      if @options[:group_name].present?
-        group = find_group(@options[:group_name])
-        @categories = group.categories.all
-      end
+    category_user = {}
+    default_notification_level = nil
+    unless @guardian.anonymous?
+      category_user = Hash[*CategoryUser.where(user: @guardian.user).pluck(:category_id, :notification_level).flatten]
+      default_notification_level = CategoryUser.notification_levels[:regular]
+    end
 
-      if SiteSetting.fixed_category_positions
-        @categories = @categories.order(:position, :id)
-      else
-        @categories = @categories.order('name ASC')
-      end
+    allowed_topic_create = Set.new(Category.topic_create_allowed(@guardian).pluck(:id))
+    @categories.each do |category|
+      category.notification_level = category_user[category.id] || default_notification_level
+      category.permission = CategoryGroup.permission_types[:full] if allowed_topic_create.include?(category.id)
+      category.has_children = category.subcategories.present?
+    end
 
-      @categories = @categories.to_a
-
-      category_user = {}
-      default_notification_level = nil
-      unless @guardian.anonymous?
-        category_user = Hash[*CategoryUser.where(user: @guardian.user).pluck(:category_id, :notification_level).flatten]
-        default_notification_level = CategoryUser.notification_levels[:regular]
-      end
-
-      allowed_topic_create = Set.new(Category.topic_create_allowed(@guardian).pluck(:id))
-      @categories.each do |category|
-        category.notification_level = category_user[category.id] || default_notification_level
-        category.permission = CategoryGroup.permission_types[:full] if allowed_topic_create.include?(category.id)
-        category.has_children = category.subcategories.present?
-      end
-
-      if @options[:parent_category_id].blank?
-        subcategories = {}
-        to_delete = Set.new
-        @categories.each do |c|
-          if c.parent_category_id.present?
-            subcategories[c.parent_category_id] ||= []
-            subcategories[c.parent_category_id] << c.id
-            to_delete << c
-          end
+    if @options[:parent_category_id].blank?
+      subcategories = {}
+      to_delete = Set.new
+      @categories.each do |c|
+        if c.parent_category_id.present?
+          subcategories[c.parent_category_id] ||= []
+          subcategories[c.parent_category_id] << c.id
+          to_delete << c
         end
-        @categories.each { |c| c.subcategory_ids = subcategories[c.id] }
-        @categories.delete_if { |c| to_delete.include?(c) }
       end
+      @categories.each { |c| c.subcategory_ids = subcategories[c.id] }
+      @categories.delete_if { |c| to_delete.include?(c) }
+    end
 
-      if @topics_by_category_id
-        @categories.each do |c|
-          topics_in_cat = @topics_by_category_id[c.id]
-          if topics_in_cat.present?
-            c.displayable_topics = []
-            topics_in_cat.each do |topic_id|
-              topic = @topics_by_id[topic_id]
-              if topic.present? && @guardian.can_see?(topic)
-                # topic.category is very slow under rails 4.2
-                topic.association(:category).target = c
-                c.displayable_topics << topic
-              end
+    if @topics_by_category_id
+      @categories.each do |c|
+        topics_in_cat = @topics_by_category_id[c.id]
+        if topics_in_cat.present?
+          c.displayable_topics = []
+          topics_in_cat.each do |topic_id|
+            topic = @topics_by_id[topic_id]
+            if topic.present? && @guardian.can_see?(topic)
+              # topic.category is very slow under rails 4.2
+              topic.association(:category).target = c
+              c.displayable_topics << topic
             end
           end
         end
@@ -269,57 +256,79 @@ after_initialize do
     end
   end
 
-  class ::CategoryList
-    prepend ExtendCategoryList
+  add_to_class(:Group, :posts_for) do |guardian, opts = nil|
+    category_ids = categories.pluck(:id)
+    topic_ids = Topic.where(category_id: category_ids).pluck(:id)
+
+    result = super(guardian, opts = nil)
+    result.where(topic_id: topic_ids)
   end
 
-  module ExtendGroupInstance
-    def posts_for(guardian, opts = nil)
-      category_ids = categories.pluck(:id)
-      topic_ids = Topic.where(category_id: category_ids).pluck(:id)
-
-      result = super(guardian, opts = nil)
-      result.where(topic_id: topic_ids)
-    end
+  add_class_method(:Group, :icij_projects) do
+    self.where(icij_group: true)
   end
 
-  module ExtendGroupClass
-    def icij_projects
-      self.where(icij_group: true)
-    end
-
-    def visible_icij_groups(user)
-      groups = self.order("name ASC")
+  add_class_method(:Group, :visible_icij_groups) do |user|
+    groups = self.order("name ASC")
 
 
-      groups = groups.where("groups.id > 0")
+    groups = groups.where("groups.id > 0")
 
-      sql = <<~SQL
-        groups.id IN (
+    sql = <<~SQL
+      groups.id IN (
 
-          SELECT g.id
-            FROM groups g
-            JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
-           WHERE gu.user_id = :user_id
-            AND  g.icij_group = true
+        SELECT g.id
+          FROM groups g
+          JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
+         WHERE gu.user_id = :user_id
+          AND  g.icij_group = true
 
-        )
-      SQL
+      )
+    SQL
 
-      params = { user_id: user&.id }
-      groups = groups.where(sql, params)
+    params = { user_id: user&.id }
+    groups = groups.where(sql, params)
 
-      groups
-    end
+    groups
   end
 
-  class ::Group
-    prepend ExtendGroupInstance
-    extend ExtendGroupClass
+  add_to_class(:Search, :user_country_search) do
+    return if SiteSetting.hide_user_profiles_from_public && !@guardian.user
+
+    users = User.includes(:user_search_data)
+      .references(:user_search_data)
+      .where(active: true)
+      .where(staged: false)
+
+    if @guardian.current_user
+      if !@guardian.is_admin?
+        user_ids = User.members_visible_icij_groups(@guardian.current_user).pluck(:id)
+        user_ids
+
+        if !user_ids.empty?
+          users = users
+            .where(id: user_ids)
+            .where("country ILIKE ?", "%#{@original_term}%")
+            .order("CASE WHEN country = '#{@original_term}' THEN 0 ELSE 1 END")
+            .order("last_posted_at DESC")
+            .limit(limit)
+        else
+          users = []
+        end
+      else
+        users = users
+          .where("country ILIKE ?", "%#{@original_term}%")
+          .order("CASE WHEN country = '#{@original_term}' THEN 0 ELSE 1 END")
+          .order("last_posted_at DESC")
+          .limit(limit)
+      end
+      users.each do |user|
+        @results.add(user)
+      end
+    end
   end
 
   module ExtendSearch
-    #<Search::GroupedSearchResults:0x00007efd20a16638 @type_filter=nil, @term="franc", @search_context=nil, @include_blurbs=true, @blurb_length=200, @posts=[], @categories=[], @users=[], @tags=[], @groups=[], @error=nil, @search_log_id=132>
     def execute
       super
 
@@ -333,42 +342,6 @@ after_initialize do
         @results
       else
         @results
-      end
-    end
-
-    def user_country_search
-      return if SiteSetting.hide_user_profiles_from_public && !@guardian.user
-
-      users = User.includes(:user_search_data)
-        .references(:user_search_data)
-        .where(active: true)
-        .where(staged: false)
-
-      if @guardian.current_user
-        if !@guardian.is_admin?
-          user_ids = User.members_visible_icij_groups(@guardian.current_user).pluck(:id)
-          user_ids
-
-          if !user_ids.empty?
-            users = users
-              .where(id: user_ids)
-              .where("country ILIKE ?", "%#{@original_term}%")
-              .order("CASE WHEN country = '#{@original_term}' THEN 0 ELSE 1 END")
-              .order("last_posted_at DESC")
-              .limit(limit)
-          else
-            users = []
-          end
-        else
-          users = users
-            .where("country ILIKE ?", "%#{@original_term}%")
-            .order("CASE WHEN country = '#{@original_term}' THEN 0 ELSE 1 END")
-            .order("last_posted_at DESC")
-            .limit(limit)
-        end
-        users.each do |user|
-          @results.add(user)
-        end
       end
     end
   end
@@ -387,56 +360,47 @@ after_initialize do
     end
   end
 
-  module ExtendSiteModel
-    def determine_user
-      if @guardian.nil?
-        user = current_user
-      elsif @guardian.current_user.nil?
-        user = nil
-      else
-        user = @guardian.current_user
-      end
-    end
-
-    # maps the projects available to the current user in a simple obejct available for assigning group permissions
-    def available_icij_projects
-      user = self.determine_user
-      Group.visible_icij_groups(user).pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
+  add_to_class(:Site, :determine_user) do
+    if @guardian.nil?
+      user = current_user
+    elsif @guardian.current_user.nil?
+      user = nil
+    else
+      user = @guardian.current_user
     end
   end
 
-  class ::Site
-    prepend ExtendSiteModel
+  add_to_class(:Site, :available_icij_projects) do
+    user = self.determine_user
+    Group.visible_icij_groups(user).pluck(:id, :name).map { |id, name| { id: id, name: name } }.as_json
   end
 
   add_to_serializer(:site, :available_icij_projects) { object.available_icij_projects }
 
-  module ExtendCategoryClass
-    def visible_icij_groups_categories(user)
-      if user.nil?
-        []
-      else
-        categories = self.all
+  add_class_method(:Category, :visible_icij_groups_categories) do |user|
+    if user.nil?
+      []
+    else
+      categories = self.all
 
-        sql = <<~SQL
-          categories.id IN (
-            SELECT cg.category_id
-            FROM category_groups cg
-            WHERE cg.group_id in (
-              SELECT g.id
-              FROM groups g
-              JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
-              WHERE gu.user_id = :user_id
-              AND  g.icij_group = true
-            )
+      sql = <<~SQL
+        categories.id IN (
+          SELECT cg.category_id
+          FROM category_groups cg
+          WHERE cg.group_id in (
+            SELECT g.id
+            FROM groups g
+            JOIN group_users gu ON gu.group_id = g.id AND gu.user_id = :user_id
+            WHERE gu.user_id = :user_id
+            AND  g.icij_group = true
           )
-        SQL
+        )
+      SQL
 
-        params = { user_id: user&.id }
+      params = { user_id: user&.id }
 
-        categories = self.where(sql, params)
-        categories
-      end
+      categories = self.where(sql, params)
+      categories
     end
   end
 
