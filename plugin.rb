@@ -7,6 +7,16 @@ register_asset 'stylesheets/common/select-kit/category-chooser.scss'
 PLUGIN_NAME = 'icij_discourse_projects'.freeze
 
 after_initialize do
+  [
+    "../controllers/categories_controller_edits.rb",
+    "../controllers/groups_controller_edits.rb",
+    "../controllers/directory_items_controller_edits.rb",
+    "../controllers/search_controller_edits.rb",
+    "../controllers/users_controller_edits.rb"
+  ].each do |path|
+    load File.expand_path(path, __FILE__)
+  end
+
   User.register_custom_field_type("organization", :string)
 
   module ::IcijDiscourseProjects
@@ -149,6 +159,14 @@ after_initialize do
     end
   end
 
+  add_to_class(:User, :organization_name) do
+    self.custom_fields["organization"]
+  end
+
+  add_to_class(:User, :added_at) do
+    ""
+  end
+
   add_class_method(:User, :members_visible_icij_groups) do |user|
     if user.nil?
       []
@@ -176,9 +194,216 @@ after_initialize do
     end
   end
 
+  add_to_class(:User, :filter_by_username_or_email_or_country) do |filter, current_user|
+    if filter =~ /.+@.+/
+      # probably an email so try the bypass
+      if user_id = UserEmail.where("lower(email) = ?", filter.downcase).pluck(:user_id).first
+        return where('users.id = ?', user_id)
+      end
+    end
+
+    user_ids = User.members_visible_icij_groups(current_user).pluck(:id)
+
+    users = joins(:primary_email)
+
+    if filter.is_a?(Array)
+      users.where(
+        'username_lower ~* :filter OR lower(user_emails.email) SIMILAR TO :filter',
+        filter: "(#{filter.join('|')})"
+      ).where(id: user_ids)
+    else
+      users.where(
+        'username_lower ILIKE :filter OR lower(user_emails.email) ILIKE :filter OR lower(country) ILIKE :filter',
+        filter: "%#{filter}%"
+      ).where(id: user_ids)
+    end
+  end
+
   add_to_serializer(:current_user, :current_user_icij_projects) { Group.visible_icij_groups(object).pluck(:id, :name).map { |id, name| { id: id, name: name } } }
   add_to_serializer(:current_user, :fellow_icij_project_members) { User.members_visible_icij_groups(object).pluck(:id) }
   add_to_serializer(:current_user, :icij_project_categories) { Category.visible_icij_groups_categories(object).pluck(:id) }
+
+  add_to_class(:UserSearch, :initialize) do |term, opts = {}|
+    @term = term
+    @term_like = "#{term.downcase.gsub("_", "\\_")}%"
+    @topic_id = opts[:topic_id]
+    @topic_allowed_users = opts[:topic_allowed_users]
+    @searching_user = opts[:searching_user]
+    @include_staged_users = opts[:include_staged_users] || false
+    @limit = opts[:limit] || 20
+    @group = opts[:group]
+    @guardian = Guardian.new(@searching_user)
+    @guardian.ensure_can_see_group!(@group) if @group
+  end
+
+  add_to_class(:UserSearch, :scoped_users) do
+    users = User.where(active: true)
+    users = users.where(staged: false) unless @include_staged_users
+
+    if @group
+      users = users.where('users.id IN (
+        SELECT user_id FROM group_users WHERE group_id = ?
+      )', @group.id)
+    end
+
+    unless @searching_user && @searching_user.staff?
+      users = users.not_suspended
+    end
+
+    # Only show users who have access to private topic
+    if @topic_id && @topic_allowed_users == "true"
+      topic = Topic.find_by(id: @topic_id)
+
+      if topic.category && topic.category.read_restricted
+        users = users.includes(:secure_categories)
+          .where("users.admin = TRUE OR categories.id = ?", topic.category.id)
+          .references(:categories)
+      end
+    end
+
+    users.limit(@limit)
+  end
+
+  add_to_class(:UserSearch, :filtered_by_term_users) do
+    users = scoped_users
+
+    if @term.present?
+      if SiteSetting.enable_names? && @term !~ /[_\.-]/
+        # query = Search.ts_query(term: @term, ts_config: "simple")
+
+        # why are they using this? the vector seems to take more time (did very rudimentary benchmark test)...maybe with thousands of users to search it starts to be faster? really not sure
+        # users = users.includes(:user_search_data)
+          # .references(:user_search_data)
+          # .where("user_search_data.search_data @@ #{query}")
+          # .order(DB.sql_fragment("CASE WHEN country LIKE ? THEN 0 ELSE 1 END ASC", @term_like, @term_like))
+
+          users = users.includes(:_custom_fields).references(:_custom_fields).where("users.username_lower ILIKE :term_like OR users.country ILIKE :term_like OR user_custom_fields.value ILIKE :term_like OR LOWER(users.name) ILIKE :term_like", term_like: @term_like)
+      else
+        users = users.where("username_lower LIKE :term_like OR country LIKE :term_like", term_like: @term_like)
+      end
+    end
+    users
+  end
+
+  add_to_class(:UserSearch, :search_ids) do
+    users = Set.new
+
+    # 1. exact username matches
+    if @term.present?
+      scoped_users.where(username_lower: @term.downcase)
+        .limit(@limit)
+        .pluck(:id)
+        .each { |id| users << id }
+
+    end
+
+    return users.to_a if users.length >= @limit
+
+    # 2. in topic
+    if @topic_id
+      filtered_by_term_users.where('users.id IN (SELECT p.user_id FROM posts p WHERE topic_id = ?)', @topic_id)
+        .order('last_seen_at DESC')
+        .limit(@limit - users.length)
+        .pluck(:id)
+        .each { |id| users << id }
+    end
+
+    return users.to_a if users.length >= @limit
+
+    # 3. global matches
+    filtered_by_term_users.order('last_seen_at DESC')
+      .limit(@limit - users.length)
+      .pluck(:id)
+      .each { |id| users << id }
+
+    users.to_a
+  end
+
+  add_to_class(:UserSearch, :search) do
+    ids = search_ids
+    return User.where("0=1") if ids.empty?
+
+    User.joins("JOIN (SELECT unnest uid, row_number() OVER () AS rn
+      FROM unnest('{#{ids.join(",")}}'::int[])
+    ) x on uid = users.id")
+      .order("rn")
+  end
+
+  add_to_class(:Search, :find_grouped_results) do
+    if @results.type_filter.present?
+      raise Discourse::InvalidAccess.new("invalid type filter") unless Search.facets.include?(@results.type_filter)
+      send("#{@results.type_filter}_search")
+    else
+      unless @search_context
+        user_search if @term.present?
+        user_country_search if @term.present?
+        category_search if @term.present?
+        tags_search if @term.present?
+      end
+      topic_search
+    end
+
+    add_more_topics_if_expected
+    @results
+  rescue ActiveRecord::StatementInvalid
+      # In the event of a PG:Error return nothing, it is likely they used a foreign language whose
+      # locale is not supported by postgres
+  end
+
+  class ::Search
+    private
+
+    def user_country_search
+      return if SiteSetting.hide_user_profiles_from_public && !@guardian.user
+
+      users = User.includes(:user_search_data)
+        .references(:user_search_data)
+        .where(active: true)
+        .where(staged: false)
+        .where("country ILIKE ?", "%#{@original_term}%")
+
+      users.each do |user|
+        @results.add(user)
+      end
+    end
+  end
+
+  add_to_serializer(:basic_user, :country) do
+    user.country
+  rescue
+    user.try(:country)
+  end
+
+  add_to_serializer(:admin_user_list, :country) do
+    user.country
+  rescue
+    user.try(:country)
+  end
+
+  add_to_serializer(:search_result_user, :country) do
+    user.country
+  rescue
+    user.try(:country)
+  end
+
+  add_to_serializer(:user, :country) { object.country }
+  add_to_serializer(:user, :organization_name) { object.organization_name }
+
+  add_to_serializer(:directory_item, :country) { object.user.country }
+  add_to_serializer(:directory_item, :organization_name) { object.user.organization_name }
+
+  add_to_serializer(:directory_item, :user_created_at_age) do
+    Time.now - object.user.created_at
+  rescue
+    nil
+  end
+
+  add_to_serializer(:directory_item, :user_last_seen_age) do
+    return nil if object.user.last_seen_at.blank?
+    Time.now - object.user.last_seen_at
+  rescue
+    nil
+  end
 
   add_to_class(:CategoryList, :find_group) do |group_name, ensure_can_see: true|
     group = Group
@@ -256,12 +481,18 @@ after_initialize do
     end
   end
 
-  add_to_class(:Group, :posts_for) do |guardian, opts = nil|
-    category_ids = categories.pluck(:id)
-    topic_ids = Topic.where(category_id: category_ids).pluck(:id)
+  module ExtendGroupInstance
+    def posts_for(guardian, opts = nil)
+      category_ids = categories.pluck(:id)
+      topic_ids = Topic.where(category_id: category_ids).pluck(:id)
 
-    result = super(guardian, opts = nil)
-    result.where(topic_id: topic_ids)
+      result = super(guardian, opts = nil)
+      result.where(topic_id: topic_ids)
+    end
+  end
+
+  class ::Group
+    prepend ExtendGroupInstance
   end
 
   add_class_method(:Group, :icij_projects) do
@@ -404,40 +635,33 @@ after_initialize do
     end
   end
 
-  module ExtendCategoryInstance
-    def icij_projects_for_category
-      if self.category_groups.nil?
-        []
-      else
-        Group.where(id: self.category_groups.pluck(:group_id)).pluck(:name)
-      end
-    end
-
-    def icij_project_subcategories_for_category
-      if self.parent_category_id
-        Group.where(id: self.parent_category.category_groups.pluck(:group_id)).pluck(:name)
-      else
-        []
-      end
-    end
-
-    def icij_project_permissions_for_category
-      perms = self.category_groups.joins(:group).includes(:group).order("groups.name").map do |cg|
-          {
-            permission_type: cg.permission_type,
-            group_name: cg.group.name
-          }
-      end
-      if perms.length == 0 && !self.read_restricted
-        perms << { permission_type: CategoryGroup.permission_types[:full], group_name: Group[:everyone]&.name.presence || :everyone }
-      end
-      perms
+  add_to_class(:Category, :icij_projects_for_category) do
+    if self.category_groups.nil?
+      []
+    else
+      Group.where(id: self.category_groups.pluck(:group_id)).pluck(:name)
     end
   end
 
-  class ::Category
-    prepend ExtendCategoryInstance
-    extend ExtendCategoryClass
+  add_to_class(:Category, :icij_project_subcategories_for_category) do
+    if self.parent_category_id
+      Group.where(id: self.parent_category.category_groups.pluck(:group_id)).pluck(:name)
+    else
+      []
+    end
+  end
+
+  add_to_class(:Category, :icij_project_permissions_for_category) do
+    perms = self.category_groups.joins(:group).includes(:group).order("groups.name").map do |cg|
+        {
+          permission_type: cg.permission_type,
+          group_name: cg.group.name
+        }
+    end
+    if perms.length == 0 && !self.read_restricted
+      perms << { permission_type: CategoryGroup.permission_types[:full], group_name: Group[:everyone]&.name.presence || :everyone }
+    end
+    perms
   end
 
   add_to_serializer(:category, :available_groups) do
@@ -449,6 +673,30 @@ after_initialize do
   add_to_serializer(:basic_category, :icij_projects_for_category) { object.icij_projects_for_category }
   add_to_serializer(:basic_category, :icij_project_subcategories_for_category) { object.icij_project_subcategories_for_category }
   add_to_serializer(:basic_category, :icij_project_permissions_for_category) { object.icij_project_permissions_for_category }
+
+  add_class_method(:TopicQuery, :public_valid_options) do
+    @public_valid_options ||=
+      %i(page
+         before
+         bumped_before
+         exclude_category_ids
+         topic_ids
+         category
+         order
+         ascending
+         min_posts
+         max_posts
+         status
+         filter
+         state
+         search
+         q
+         group_name
+         tags
+         match_all_tags
+         no_subcategories
+         no_tags)
+  end
 
   module TopicQueryExtension
     def create_list(filter, options = {}, topics = nil)
@@ -466,30 +714,6 @@ after_initialize do
   end
 
   class ::TopicQuery
-    def self.public_valid_options
-      @public_valid_options ||=
-        %i(page
-           before
-           bumped_before
-           exclude_category_ids
-           topic_ids
-           category
-           order
-           ascending
-           min_posts
-           max_posts
-           status
-           filter
-           state
-           search
-           q
-           group_name
-           tags
-           match_all_tags
-           no_subcategories
-           no_tags)
-    end
-
     prepend TopicQueryExtension
   end
 
@@ -499,241 +723,6 @@ after_initialize do
     def generate_list_for(action, target_user, opts)
       action == "group_topics" ? IcijTopicQuery.new(current_user, opts).send("list_icij_group_topics", target_user) : TopicQuery.new(current_user, opts).send("list_#{action}", target_user)
     end
-  end
-
-  module ExtendCategoriesController
-    def create
-      guardian.ensure_can_create!(Category)
-      position = category_params.delete(:position)
-
-      @category =
-        begin
-          Category.new(category_params.merge(user: current_user))
-        rescue ArgumentError => e
-          return render json: { errors: [e.message] }, status: 422
-        end
-
-      if params[:permissions].nil?
-        @category.errors[:base] << "Please assign a project to this group."
-        return render_json_error(@category)
-      end
-
-      icij_groups = Group.visible_icij_groups(current_user).pluck(:name)
-      has_permission = icij_groups.any? { |group| (params[:permissions].keys).include? group }
-
-      unless has_permission
-        @category.errors[:base] << "You are not a member of this project."
-        return render_json_error(@category)
-      end
-
-      if @category.save
-        @category.move_to(position.to_i) if position
-
-        Scheduler::Defer.later "Log staff action create category" do
-          @staff_action_logger.log_category_creation(@category)
-        end
-
-        render_serialized(@category, CategorySerializer)
-      else
-        return render_json_error(@category) unless @category.save
-      end
-    end
-  end
-
-  class ::CategoriesController
-    prepend ExtendCategoriesController
-  end
-
-  # GroupsController.ancestors
-
-  module ExtendGroupsController
-    def search
-      groups = Group.visible_icij_groups(current_user)
-        .order(:name)
-
-      if (term = params[:term]).present?
-        groups = groups.where("name ILIKE :term OR full_name ILIKE :term", term: "%#{term}%")
-      end
-
-      if params[:ignore_automatic].to_s == "true"
-        groups = groups.where(automatic: false)
-      end
-
-      if Group.preloaded_custom_field_names.present?
-        Group.preload_custom_fields(groups, Group.preloaded_custom_field_names)
-      end
-
-      render_serialized(groups, BasicGroupSerializer)
-    end
-
-    def index
-      type_filters_icij = {
-        my: Proc.new { |groups, user|
-          raise Discourse::NotFound unless user
-          Group.member_of(groups, user)
-        },
-        owner: Proc.new { |groups, user|
-          raise Discourse::NotFound unless user
-          Group.owner_of(groups, user)
-        },
-        public: Proc.new { |groups|
-          groups.where(public_admission: true, automatic: false)
-        },
-        close: Proc.new {
-          current_user.groups.where(
-            public_admission: false,
-            automatic: false
-          )
-        },
-        automatic: Proc.new { |groups|
-          groups.where(automatic: true)
-        }
-      }
-
-      unless SiteSetting.enable_group_directory? || current_user&.staff?
-        raise Discourse::InvalidAccess.new(:enable_group_directory)
-      end
-
-      page_size = 30
-      page = params[:page]&.to_i || 0
-      order = %w{name user_count}.delete(params[:order])
-      dir = params[:asc] ? 'ASC' : 'DESC'
-      groups = Group.visible_groups(current_user, order ? "#{order} #{dir}" : nil).visible_icij_groups(current_user)
-
-      if (filter = params[:filter]).present?
-        groups = Group.search_groups(filter, groups: groups)
-      end
-
-      type_filters = type_filters_icij.keys
-
-      if username = params[:username]
-        groups = type_filters_icij[:my].call(groups, User.find_by_username(username))
-        type_filters = type_filters - [:my, :owner]
-      end
-
-      unless guardian.is_staff?
-        # hide automatic groups from all non stuff to de-clutter page
-        groups = groups.where("automatic IS FALSE OR groups.id = #{Group::AUTO_GROUPS[:moderators]}")
-        type_filters.delete(:automatic)
-      end
-
-      if Group.preloaded_custom_field_names.present?
-        Group.preload_custom_fields(groups, Group.preloaded_custom_field_names)
-      end
-
-      if type = params[:type]&.to_sym
-        callback = type_filters_icij[type]
-        if !callback
-          raise Discourse::InvalidParameters.new(:type)
-        end
-        groups = callback.call(groups, current_user)
-      end
-
-      if current_user
-        group_users = GroupUser.where(group: groups, user: current_user)
-        user_group_ids = group_users.pluck(:group_id)
-        owner_group_ids = group_users.where(owner: true).pluck(:group_id)
-      else
-        type_filters = type_filters - [:my, :owner]
-      end
-
-      count = groups.count
-      groups = groups.offset(page * page_size).limit(page_size)
-
-      render_json_dump(
-        groups: serialize_data(groups,
-          BasicGroupSerializer,
-          user_group_ids: user_group_ids || [],
-          owner_group_ids: owner_group_ids || []
-        ),
-        extras: {
-          type_filters: type_filters
-        },
-        total_rows_groups: count,
-        load_more_groups: groups_path(
-          page: page + 1,
-          type: type,
-          order: order,
-          asc: params[:asc],
-          filter: filter
-        ),
-      )
-    end
-
-    def show
-      respond_to do |format|
-        group = find_group(:id)
-
-        format.html do
-          @title = group.full_name.present? ? group.full_name.capitalize : group.name
-          @description_meta = group.bio_cooked.present? ? PrettyText.excerpt(group.bio_cooked, 300) : @title
-          render :show
-        end
-
-        draft_key = Draft::NEW_TOPIC
-        draft_sequence = DraftSequence.current(current_user, draft_key)
-        draft = Draft.get(current_user, draft_key, draft_sequence) if current_user
-
-        format.json do
-          groups = Group.visible_groups(current_user)
-          icij_groups = Group.visible_icij_groups(current_user)
-
-          if !guardian.is_staff?
-            groups = groups.where(automatic: false)
-          end
-
-          render_json_dump(
-            group: serialize_data(group, GroupShowSerializer, root: nil),
-            draft_key: draft_key,
-            draft_sequence: draft_sequence,
-            draft: draft,
-            extras: {
-              visible_group_names: groups.pluck(:name),
-              icij_group_names: icij_groups.pluck(:name)
-            }
-          )
-        end
-      end
-    end
-
-    def categories
-      group = find_group(:group_id)
-
-      category_options = {
-        group_name: group.name,
-        include_topics: false
-      }
-
-      ids_to_exclude = Category.where.not(id: group.categories.pluck(:id)).pluck(:id)
-
-      topic_options = {
-        per_page: SiteSetting.categories_topics,
-        no_definitions: true,
-        exclude_category_ids: ids_to_exclude
-      }
-
-      result = CategoryAndTopicLists.new
-      result.category_list = CategoryList.new(guardian, category_options)
-      result.topic_list = TopicQuery.new(current_user, topic_options).list_latest
-
-      draft_key = Draft::NEW_TOPIC
-      draft_sequence = DraftSequence.current(current_user, draft_key)
-      draft = Draft.get(current_user, draft_key, draft_sequence) if current_user
-
-      %w{category topic}.each do |type|
-        result.send(:"#{type}_list").draft = draft
-        result.send(:"#{type}_list").draft_key = draft_key
-        result.send(:"#{type}_list").draft_sequence = draft_sequence
-      end
-
-      render_json_dump(
-        lists: serialize_data(result, CategoryAndTopicListsSerializer, root: false)
-      )
-    end
-  end
-
-  class ::GroupsController
-    prepend ExtendGroupsController
   end
 
   Discourse::Application.routes.append do
