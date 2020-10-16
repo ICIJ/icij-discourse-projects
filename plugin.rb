@@ -12,12 +12,14 @@ after_initialize do
     "../controllers/groups_controller_edits.rb",
     "../controllers/directory_items_controller_edits.rb",
     "../controllers/search_controller_edits.rb",
-    "../controllers/users_controller_edits.rb"
+    "../controllers/users_controller_edits.rb",
+    "../lib/dataconnect.rb"
   ].each do |path|
     load File.expand_path(path, __FILE__)
   end
 
   User.register_custom_field_type("organization", :string)
+  Topic.register_custom_field_type("datashare_document_id", :string)
 
   module ::IcijDiscourseProjects
     class Engine < ::Rails::Engine
