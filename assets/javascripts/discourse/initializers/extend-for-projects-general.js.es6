@@ -52,6 +52,7 @@ function initializePlugin(api) {
     const discoveryRouteName = route.controller.currentRouteName;
 
     let discoveryRoutesToCheck = ["discovery.categoryNone", "discovery.latestParentCategory", "discovery.topParentCategory", "discovery.newParentCategory", "discovery.unreadParentCategory", "discovery.parentCategory", "discovery.category", "discovery.categoryWithID"]
+    let topicRoutesToCheck = ["topic.fromParamsNear", "topic.fromParams"]
 
     if (discoveryRouteName.indexOf('group.') === 0) {
       let groupName = route.controllerFor('group').get('model.name');
@@ -59,6 +60,16 @@ function initializePlugin(api) {
       return categories
     } else if (discoveryRoutesToCheck.includes(discoveryRouteName)) {
       let groupName = route.controllerFor('discovery').get('category.icij_projects_for_category') || []
+      let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === groupName[0])))
+      if (groupName.length === 0) {
+        return existingContent.filter(c => icijProjectCategories.includes(c.id))
+      } else {
+        return categories;
+      }
+    } else if (topicRoutesToCheck.includes(discoveryRouteName)) {
+      let groupName = []
+      groupName = groupName.concat(route.controllerFor('topic').get('model.category.group_names') || [])
+      groupName = groupName.concat(route.controllerFor('topic').get('model.category.icij_projects_for_category') || [])
       let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === groupName[0])))
       if (groupName.length === 0) {
         return existingContent.filter(c => icijProjectCategories.includes(c.id))
