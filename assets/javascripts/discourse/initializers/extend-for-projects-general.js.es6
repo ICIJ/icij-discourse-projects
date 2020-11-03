@@ -54,32 +54,35 @@ function initializePlugin(api) {
     let discoveryRoutesToCheck = ["discovery.categoryNone", "discovery.latestParentCategory", "discovery.topParentCategory", "discovery.newParentCategory", "discovery.unreadParentCategory", "discovery.parentCategory", "discovery.category", "discovery.categoryWithID"]
     let topicRoutesToCheck = ["topic.fromParamsNear", "topic.fromParams"]
 
-    if (discoveryRouteName.indexOf('group.') === 0) {
-      let groupName = route.controllerFor('group').get('model.name');
-      let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === groupName)))
-      return categories
-    } else if (discoveryRoutesToCheck.includes(discoveryRouteName)) {
-      let groupName = route.controllerFor('discovery').get('category.icij_projects_for_category') || []
-      let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === groupName[0])))
-      if (groupName.length === 0) {
-        return existingContent.filter(c => icijProjectCategories.includes(c.id))
-      } else {
-        return categories;
-      }
-    } else if (topicRoutesToCheck.includes(discoveryRouteName)) {
-      let groupName = []
-      groupName = groupName.concat(route.controllerFor('topic').get('model.category.group_names') || [])
-      groupName = groupName.concat(route.controllerFor('topic').get('model.category.icij_projects_for_category') || [])
-      let categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === groupName[0])))
-      if (groupName.length === 0) {
-        return existingContent.filter(c => icijProjectCategories.includes(c.id))
-      } else {
-        return categories;
-      }
-    } else {
-      let categories = existingContent.filter(c => icijProjectCategories.includes(c.id))
-      return categories
+    let gn = []
+    let categories
+    switch (true) {
+      case (discoveryRouteName.indexOf('group.') === 0):
+        gn.push(route.controllerFor('group').get('model.name'));
+        categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === gn[0])));
+        break;
+      case (discoveryRoutesToCheck.includes(discoveryRouteName)):
+        gn = gn.concat(route.controllerFor('discovery').get('category.icij_projects_for_category') || [])
+        if (gn.length === 0) {
+          categories = existingContent.filter(c => icijProjectCategories.includes(c.id))
+        } else {
+          categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === gn[0])))
+        };
+        break;
+      case (topicRoutesToCheck.includes(discoveryRouteName)):
+        gn = gn.concat(route.controllerFor('topic').get('model.category.group_names') || [])
+        gn = gn.concat(route.controllerFor('topic').get('model.category.icij_projects_for_category') || [])
+        if (gn.length === 0) {
+          categories = existingContent.filter(c => icijProjectCategories.includes(c.id))
+        } else {
+          categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === gn[0])))
+        }
+        break;
+      default:
+        categories = existingContent.filter(c => icijProjectCategories.includes(c.id))
     }
+
+    return categories
   }),
 
   api.modifySelectKit("category-drop").modifyContent((context, existingContent) => {
