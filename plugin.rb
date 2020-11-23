@@ -7,15 +7,6 @@ register_asset 'stylesheets/common/select-kit/category-chooser.scss'
 PLUGIN_NAME = 'icij_discourse_projects'.freeze
 
 after_initialize do
-  [
-    "../controllers/categories_controller_edits.rb",
-    "../controllers/groups_controller_edits.rb",
-    "../controllers/directory_items_controller_edits.rb",
-    "../controllers/search_controller_edits.rb",
-    "../controllers/users_controller_edits.rb"
-  ].each do |path|
-    load File.expand_path(path, __FILE__)
-  end
 
   User.register_custom_field_type("organization", :string)
 
@@ -194,29 +185,37 @@ after_initialize do
     end
   end
 
-  add_to_class(:User, :filter_by_username_or_email_or_country) do |filter, current_user|
-    if filter =~ /.+@.+/
-      # probably an email so try the bypass
-      if user_id = UserEmail.where("lower(email) = ?", filter.downcase).pluck(:user_id).first
-        return where('users.id = ?', user_id)
+  module UserExtension
+    class ::User
+      scope :filter_by_username_or_email_or_country, ->(filter, current_user) do
+        if filter =~ /.+@.+/
+          # probably an email so try the bypass
+          if user_id = UserEmail.where("lower(email) = ?", filter.downcase).pluck(:user_id).first
+            return where('users.id = ?', user_id)
+          end
+        end
+
+        user_ids = User.members_visible_icij_groups(current_user).pluck(:id)
+
+        users = joins(:primary_email)
+
+        if filter.is_a?(Array)
+          users.where(
+            'username_lower ~* :filter OR lower(user_emails.email) SIMILAR TO :filter',
+            filter: "(#{filter.join('|')})"
+          ).where(id: user_ids)
+        else
+          users.where(
+            'username_lower ILIKE :filter OR lower(user_emails.email) ILIKE :filter OR lower(country) ILIKE :filter',
+            filter: "%#{filter}%"
+          ).where(id: user_ids)
+        end
       end
     end
+  end
 
-    user_ids = User.members_visible_icij_groups(current_user).pluck(:id)
-
-    users = joins(:primary_email)
-
-    if filter.is_a?(Array)
-      users.where(
-        'username_lower ~* :filter OR lower(user_emails.email) SIMILAR TO :filter',
-        filter: "(#{filter.join('|')})"
-      ).where(id: user_ids)
-    else
-      users.where(
-        'username_lower ILIKE :filter OR lower(user_emails.email) ILIKE :filter OR lower(country) ILIKE :filter',
-        filter: "%#{filter}%"
-      ).where(id: user_ids)
-    end
+  class ::User
+    prepend UserExtension
   end
 
   add_to_serializer(:current_user, :current_user_icij_projects) { Group.visible_icij_groups(object).pluck(:id, :name).map { |id, name| { id: id, name: name } } }
@@ -729,5 +728,15 @@ after_initialize do
     %w{groups g}.each do |root_path|
       get "g/:group_id/categories" => 'groups#categories', constraints: { group_id: RouteFormat.username }
     end
+  end
+
+  [
+    "../controllers/categories_controller_edits.rb",
+    "../controllers/groups_controller_edits.rb",
+    "../controllers/directory_items_controller_edits.rb",
+    "../controllers/search_controller_edits.rb",
+    "../controllers/users_controller_edits.rb"
+  ].each do |path|
+    load File.expand_path(path, __FILE__)
   end
 end

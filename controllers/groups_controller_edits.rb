@@ -147,6 +147,95 @@ module ExtendGroupsController
       end
     end
   end
+
+  def members
+    group = find_group(:group_id)
+
+    guardian.ensure_can_see_group_members!(group)
+
+    limit = (params[:limit] || 50).to_i
+    offset = params[:offset].to_i
+
+    raise Discourse::InvalidParameters.new(:limit) if limit < 0 || limit > 1000
+    raise Discourse::InvalidParameters.new(:offset) if offset < 0
+
+    dir = (params[:desc] && params[:desc].present?) ? 'DESC' : 'ASC'
+    order = ""
+
+    if params[:requesters]
+      guardian.ensure_can_edit!(group)
+
+      users = group.requesters
+      total = users.count
+
+      if (filter = params[:filter]).present?
+        filter = filter.split(',') if filter.include?(',')
+
+        if current_user&.admin
+          users = users.filter_by_username_or_email(filter)
+        else
+          users = users.filter_by_username(filter)
+        end
+      end
+
+      users = users
+        .select("users.*, group_requests.reason, group_requests.created_at requested_at")
+        .order(params[:order] == 'requested_at' ? "group_requests.created_at #{dir}" : "")
+        .order(username_lower: dir)
+        .limit(limit)
+        .offset(offset)
+
+      return render json: {
+        members: serialize_data(users, GroupRequesterSerializer),
+        meta: {
+          total: total,
+          limit: limit,
+          offset: offset
+        }
+      }
+    end
+
+    if params[:order] && %w{last_posted_at last_seen_at}.include?(params[:order])
+      order = "#{params[:order]} #{dir} NULLS LAST"
+    elsif params[:order] == 'added_at'
+      order = "group_users.created_at #{dir}"
+    end
+
+    users = group.users.human_users
+    total = users.count
+
+    if (filter = params[:filter]).present?
+      filter = filter.split(',') if filter.include?(',')
+
+      users = users.filter_by_username_or_email_or_country(filter, current_user)
+    end
+
+    users = users.joins(:user_option).select('users.*, user_options.timezone, group_users.created_at as added_at')
+
+    members = users
+      .order('NOT group_users.owner')
+      .order(order)
+      .order(username_lower: dir)
+      .limit(limit)
+      .offset(offset)
+      .includes(:primary_group)
+
+    owners = users
+      .order(order)
+      .order(username_lower: dir)
+      .where('group_users.owner')
+      .includes(:primary_group)
+
+    render json: {
+      members: serialize_data(members, GroupUserSerializer),
+      owners: serialize_data(owners, GroupUserSerializer),
+      meta: {
+        total: total,
+        limit: limit,
+        offset: offset
+      }
+    }
+  end
 end
 
 class ::GroupsController
@@ -184,6 +273,6 @@ class ::GroupsController
       lists: serialize_data(result, CategoryAndTopicListsSerializer, root: false)
     )
   end
-  
+
   prepend ExtendGroupsController
 end
