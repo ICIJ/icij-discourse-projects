@@ -109,6 +109,13 @@ function initializePlugin(api) {
     }
   }),
 
+  api.modifyClass("controller:group-index", {
+    @discourseComputed
+    filterPlaceholder() {
+      return "groups.members.filter_placeholder_icij"
+    }
+  }),
+
   api.modifyClass("controller:group", {
     showing: "categories",
 

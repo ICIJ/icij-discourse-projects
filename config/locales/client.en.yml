@@ -509,6 +509,7 @@ en:
         title: "Members"
         filter_placeholder_admin: "username or email"
         filter_placeholder: "username"
+        filter_placeholder_icij: "username, email, or country"
         remove_member: "Remove Member"
         remove_member_description: "Remove <b>%{username}</b> from this project"
         make_owner: "Make Owner"
@@ -1168,6 +1169,7 @@ en:
 
     email: 'Email'
     username: 'Username'
+    country: 'Country'
     last_seen: 'Seen'
     created: 'Created'
     created_lowercase: 'created'

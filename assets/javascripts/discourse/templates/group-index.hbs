@@ -14,6 +14,7 @@
     <table class='group-members'>
       <thead>
         {{group-index-toggle order=order desc=desc field='username_lower' i18nKey='username'}}
+        {{group-index-toggle order=order desc=desc field='country' i18nKey='country'}}
         {{group-index-toggle order=order desc=desc field='last_posted_at' i18nKey='last_post'}}
         {{group-index-toggle order=order desc=desc field='last_seen_at'  i18nKey='last_seen'}}
         <th></th>
@@ -24,6 +25,9 @@
           <tr>
             <td class='avatar'>
               {{user-info user=m skipName=skipName}}
+            </td>
+            <td>
+              <span class="text">{{m.country}}</span>
             </td>
             <td>
               <span class="text">{{bound-date m.last_posted_at}}</span>
