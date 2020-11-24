@@ -199,6 +199,8 @@ module ExtendGroupsController
       order = "#{params[:order]} #{dir} NULLS LAST"
     elsif params[:order] == 'added_at'
       order = "group_users.created_at #{dir}"
+    elsif params[:order] == 'country'
+      order = "country #{dir}"
     end
 
     users = group.users.human_users
