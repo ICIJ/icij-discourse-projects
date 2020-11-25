@@ -1152,6 +1152,7 @@ en:
     unreachable_themes: "We were unable to check for updates on the following themes:"
 
   site_settings:
+    enable_group_pictures_in_all_contexts: "Enabling this will display group pictures on the groups index page and on project home pages, while disabling it will only display group pictures on the project home pages."
     censored_words: "Words that will be automatically replaced with &#9632;&#9632;&#9632;&#9632;"
     delete_old_hidden_posts: "Auto-delete any hidden posts that stay hidden for more than 30 days."
     default_locale: "The default language of this Discourse instance"

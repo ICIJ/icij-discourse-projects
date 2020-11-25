@@ -195,6 +195,19 @@ function initializePlugin(api) {
   }),
 
   api.modifyClass("route:discovery-categories", {
+    setupController(controller, model) {
+      controller.set("model", model);
+
+      this.controllerFor("navigation/categories").setProperties({
+        showCategoryAdmin: model.get("can_create_category"),
+        canCreateTopic: model.get("can_create_topic")
+      });
+
+      this.controllerFor("discovery/categories").setProperties({
+        displayGroupPictures: Discourse.SiteSettings.enable_group_pictures_in_all_contexts
+      });
+    },
+
     actions: {
       createCategory() {
         const groups = this.site.available_icij_projects
@@ -211,10 +224,8 @@ function initializePlugin(api) {
         });
 
         showModal("edit-category", { model });
+
         this.controllerFor("edit-category").set("selectedTab", "general");
-        this.controllerFor("discovery/categories").setProperties({
-          displayGroupPictures: false
-        });
       }
     }
   }),
