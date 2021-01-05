@@ -2514,6 +2514,8 @@ en:
     filters:
       with_topics: "%{filter} topics"
       with_category: "%{filter} %{category} topics"
+      watching:
+        title: "Watching"
       latest:
         title: "Latest"
         title_with_count:

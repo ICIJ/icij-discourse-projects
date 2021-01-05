@@ -8,7 +8,15 @@
     </div>
 
     <div class='column'>
-      {{categories-topic-list topics=model.topics filter="latest" linkToAll=isGroupCategoriesRoute class="latest-topic-list"}}
+      {{#if model.topics.watching}}
+        <div class="container" style="margin-bottom: 15px">
+          {{categories-topic-list topics=model.topics.watching filter="watching" linkToAll=isGroupCategoriesRoute class="latest-topic-list"}}
+        </div>
+      {{/if}}
+
+      <div class="container">
+        {{categories-topic-list topics=model.topics.latest filter="latest" linkToAll=isGroupCategoriesRoute class="latest-topic-list"}}
+      </div>
     </div>
   </div>
 </div>

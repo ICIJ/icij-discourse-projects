@@ -357,9 +357,14 @@ export default {
         const data = {};
 
         return ajax(`/g/${this.name}/${type}.json`).then(result => {
+          const latest = TopicList.topicsFrom(this.store, result.lists)
+          const watching = latest.filter(topic => topic.notification_level === 3)
           return EmberObject.create({
             categories: CategoryList.categoriesFrom(this.store, result.lists),
-            topics: TopicList.topicsFrom(this.store, result.lists),
+            topics: {
+              latest: latest,
+              watching: watching
+            },
             can_create_category: result.lists.category_list.can_create_category,
             can_create_topic: result.lists.category_list.can_create_topic,
             draft_key: result.lists.category_list.draft_key,
