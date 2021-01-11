@@ -7,8 +7,12 @@
     {{latest-topic-list-item topic=t}}
   {{/each}}
   <div class="more-topics">
-    {{#if linkToAll}}
-      <a href="{{get-url (concat 'activity/topics')}}" class="btn btn-default pull-right">{{i18n "more"}}</a>
+    {{#if isGroupCategoriesRoute}}
+      {{#if linkToWatching}}
+        <a href="{{get-url (concat 'activity/watching')}}" class="btn btn-default pull-right">{{i18n "more"}}</a>
+      {{else}}
+        <a href="{{get-url (concat 'activity/topics')}}" class="btn btn-default pull-right">{{i18n "more"}}</a>
+      {{/if}}
     {{else}}
       <a href="{{get-url (concat '/' filter)}}" class="btn btn-default pull-right">{{i18n "more"}}</a>
     {{/if}}

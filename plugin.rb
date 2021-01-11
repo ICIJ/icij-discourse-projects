@@ -10,6 +10,11 @@ after_initialize do
 
   User.register_custom_field_type("organization", :string)
 
+  DiscoursePluginRegistry.serialized_current_user_fields << 'prioritize_watched_topics'
+  User.register_custom_field_type("prioritize_watched_topics", :boolean)
+  add_to_serializer(:current_user, :prioritize_watched_topics) { object.prioritize_watched_topics }
+  register_editable_user_custom_field :prioritize_watched_topics
+
   module ::IcijDiscourseProjects
     class Engine < ::Rails::Engine
       engine_name PLUGIN_NAME
@@ -156,6 +161,10 @@ after_initialize do
 
   add_to_class(:User, :added_at) do
     ""
+  end
+
+  add_to_class(:User, :prioritize_watched_topics) do
+    self.custom_fields["prioritize_watched_topics"] ? true : false
   end
 
   add_class_method(:User, :members_visible_icij_groups) do |user|
@@ -679,6 +688,7 @@ after_initialize do
          before
          bumped_before
          exclude_category_ids
+         watching
          topic_ids
          category
          order
@@ -700,7 +710,8 @@ after_initialize do
   module TopicQueryExtension
     def create_list(filter, options = {}, topics = nil)
       list = super
-      if !@options[:exclude_category_ids].nil?
+
+      if @options[:exclude_category_ids]
         ids = @options[:exclude_category_ids]
         topics = list.topics.select { |topic| !ids.include?(topic.category_id) }
         list = TopicList.new(filter, @user, topics, options.merge(@options))
@@ -709,6 +720,23 @@ after_initialize do
       else
         list
       end
+    end
+
+    def list_group_watching_topics(group)
+      list = default_results.where("
+        topics.user_id IN (
+          SELECT user_id FROM group_users gu WHERE gu.group_id = #{group.id.to_i}
+        )
+      ").where("
+        topics.id IN (
+          SELECT tu.topic_id FROM topic_users tu
+          WHERE tu.user_id = :user_id AND
+                tu.notification_level = :level
+        )",
+        user_id: @guardian.user.id, level: 3
+      )
+
+      create_list(:group_watching_topics, {}, list)
     end
   end
 
@@ -728,6 +756,10 @@ after_initialize do
     %w{groups g}.each do |root_path|
       get "g/:group_id/categories" => 'groups#categories', constraints: { group_id: RouteFormat.username }
     end
+
+    scope "/topics", username: RouteFormat.username do
+      get "groups/:group_name/watching" => "list#group_watching_topics", as: "group_watching_topics", group_name: RouteFormat.username
+    end
   end
 
   [
@@ -735,7 +767,8 @@ after_initialize do
     "../controllers/groups_controller_edits.rb",
     "../controllers/directory_items_controller_edits.rb",
     "../controllers/search_controller_edits.rb",
-    "../controllers/users_controller_edits.rb"
+    "../controllers/users_controller_edits.rb",
+    "../controllers/list_controller_edits.rb"
   ].each do |path|
     load File.expand_path(path, __FILE__)
   end

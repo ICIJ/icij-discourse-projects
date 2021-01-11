@@ -105,6 +105,11 @@ export default Ember.Controller.extend({
   },
 
   @computed
+  displayWatching() {
+    return (this.currentUser && this.currentUser.prioritize_watched_topics)
+  },
+
+  @computed
   isGroupCategoriesRoute()  {
     const container = Discourse.__container__;
     const route = container.lookup("route:application");

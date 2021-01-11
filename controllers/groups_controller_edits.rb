@@ -276,5 +276,32 @@ class ::GroupsController
     )
   end
 
+  def watching
+    group = find_group(:group_id)
+
+    ids_to_exclude = Category.where.not(id: group.categories.pluck(:id)).pluck(:id)
+
+    topic_options = {
+      per_page: SiteSetting.categories_topics,
+      no_definitions: true,
+      exclude_category_ids: ids_to_exclude,
+      watching: true
+    }
+
+    result = TopicQuery.new(current_user, topic_options).list_latest
+
+    draft_key = Draft::NEW_TOPIC
+    draft_sequence = DraftSequence.current(current_user, draft_key)
+    draft = Draft.get(current_user, draft_key, draft_sequence) if current_user
+
+    result.draft = draft
+    result.draft_key = draft_key
+    result.draft_sequence = draft_sequence
+
+    render_json_dump(
+      lists: serialize_data(result, TopicListSerializer, root: false)
+    )
+  end
+
   prepend ExtendGroupsController
 end

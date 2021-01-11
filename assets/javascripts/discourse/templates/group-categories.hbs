@@ -8,14 +8,16 @@
     </div>
 
     <div class='column'>
-      {{#if model.topics.watching}}
-        <div class="container" style="margin-bottom: 15px">
-          {{categories-topic-list topics=model.topics.watching filter="watching" linkToAll=isGroupCategoriesRoute class="latest-topic-list"}}
-        </div>
+      {{#if displayWatching}}
+        {{#if model.topics.watching}}
+          <div class="container" style="margin-bottom: 15px">
+            {{categories-topic-list watching=true topics=model.topics.watching filter="watching" linkToWatching=displayWatching isGroupCategoriesRoute=isGroupCategoriesRoute class="latest-topic-list"}}
+          </div>
+        {{/if}}
       {{/if}}
 
       <div class="container">
-        {{categories-topic-list topics=model.topics.latest filter="latest" linkToAll=isGroupCategoriesRoute class="latest-topic-list"}}
+        {{categories-topic-list topics=model.topics.latest filter="latest" linkToWatching=false isGroupCategoriesRoute=isGroupCategoriesRoute class="latest-topic-list"}}
       </div>
     </div>
   </div>

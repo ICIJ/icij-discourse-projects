@@ -519,6 +519,7 @@ en:
         owner: "Owner"
       topics: "Topics"
       posts: "Posts"
+      watching: "Watched Topics"
       mentions: "Mentions"
       messages: "Messages"
       notification_level: "Default notification level for project messages"
@@ -618,6 +619,7 @@ en:
       none: "(select an option)"
 
     user:
+      prioritize_watched_topics: "View watched topics over latest topics on project pages."
       said: "{{username}}:"
       profile: "Profile"
       mute: "Mute"

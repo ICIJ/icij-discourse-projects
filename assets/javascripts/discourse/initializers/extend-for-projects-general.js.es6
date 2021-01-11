@@ -273,7 +273,16 @@ function initializePlugin(api) {
         }
       }
     }
-  })
+  }),
+
+  api.modifyClass('controller:preferences/account', {
+     actions: {
+       save () {
+         this.saveAttrNames.push('custom_fields')
+         this._super()
+       }
+     }
+   })
 };
 
 export default {
@@ -370,6 +379,14 @@ export default {
             draft_key: result.lists.category_list.draft_key,
             draft: result.lists.category_list.draft,
             draft_sequence: result.lists.category_list.draft_sequence
+          })
+        })
+      },
+
+      findWatchedTopics() {
+        return ajax(`/g/${this.name}/topics/watching.json`).then(result => {
+          return EmberObject.create({
+              topics: TopicList.topicsFrom(this.store, result.lists)
           })
         })
       }
