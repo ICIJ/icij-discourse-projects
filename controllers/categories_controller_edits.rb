@@ -7,7 +7,7 @@ module CategoriesControllerExtension
     end
 
     icij_groups = Group.visible_icij_groups(current_user).pluck(:name)
-    has_permission = icij_groups.any? { |group| (params[:permissions].keys).include? group }
+    has_permission = icij_groups.any? { |group| (params[:permissions].keys).include? group.downcase }
 
     unless has_permission
       return render json: { errors: ['You are not a member of this project.'] }, status: 403
