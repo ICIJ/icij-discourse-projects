@@ -724,8 +724,8 @@ after_initialize do
 
     def list_group_watching_topics(group)
       list = default_results.where("
-        topics.user_id IN (
-          SELECT user_id FROM group_users gu WHERE gu.group_id = #{group.id.to_i}
+        topics.category_id IN (
+          SELECT category_id FROM category_groups cg WHERE cg.group_id = #{group.id.to_i}
         )
       ").where("
         topics.id IN (
