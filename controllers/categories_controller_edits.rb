@@ -6,8 +6,8 @@ module CategoriesControllerExtension
       return render json: { errors: ['Please assign a project to this group.'] }, status: 400
     end
 
-    icij_groups = Group.visible_icij_groups(current_user).pluck(:name)
-    icij_groups = icij_groups.any? icij_groups.map! { |name| name.downcase }
+    icij_groups = Group.visible_icij_groups(current_user)
+    icij_groups = icij_groups.present? ? icij_groups.pluck(:name).map! { |name| name.downcase } : []
     has_permission = icij_groups.any? { |group| (params[:permissions].keys.map! { |key| key.downcase }).include? group.downcase }
 
     unless has_permission
