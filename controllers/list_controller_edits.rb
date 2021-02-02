@@ -12,6 +12,14 @@ module ExtendListController
     list.prev_topics_url = construct_url_with(:prev, list_opts)
     respond_with_list(list)
   end
+
+  def watching_topics
+    list_opts = build_topic_list_options
+    list = generate_list_for("watching_topics", current_user, list_opts)
+    list.more_topics_url = construct_url_with(:next, list_opts)
+    list.prev_topics_url = construct_url_with(:prev, list_opts)
+    respond_with_list(list)
+  end
 end
 
 class ::ListController

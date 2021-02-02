@@ -722,6 +722,19 @@ after_initialize do
       end
     end
 
+    def list_watching_topics(user)
+      list = default_results.where("
+        topics.id IN (
+          SELECT tu.topic_id FROM topic_users tu
+          WHERE tu.user_id = :user_id AND
+                tu.notification_level = :level
+        )",
+        user_id: user.id, level: 3
+      )
+
+      create_list(:watching_topics, {}, list)
+    end
+
     def list_group_watching_topics(group)
       list = default_results.where("
         topics.category_id IN (
@@ -753,6 +766,8 @@ after_initialize do
   end
 
   Discourse::Application.routes.append do
+    get "/watching" => "list#watching_topics", as: "watching_topics"
+
     %w{groups g}.each do |root_path|
       get "g/:group_id/categories" => 'groups#categories', constraints: { group_id: RouteFormat.username }
     end
