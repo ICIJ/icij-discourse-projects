@@ -2557,8 +2557,8 @@ en:
           other: "New ({{count}})"
         help: "topics created in the last few days"
       posted:
-        title: "My Posts"
-        help: "topics you have posted in"
+        title: "Watching"
+        help: "topics you are watching"
       bookmarks:
         title: "Bookmarks"
         help: "topics you have bookmarked"
