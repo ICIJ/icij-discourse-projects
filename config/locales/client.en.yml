@@ -1403,7 +1403,7 @@ en:
       edit_shared_draft: "Edit Shared Draft"
       title: "Or press Ctrl+Enter"
 
-      users_placeholder: "Add a user"
+      users_placeholder: "Add a user or a project"
       title_placeholder: "What is this discussion about in one brief sentence?"
       title_or_link_placeholder: "Type title, or paste a link here"
       edit_reason_placeholder: "why are you editing?"

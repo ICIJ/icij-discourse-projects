@@ -282,7 +282,23 @@ function initializePlugin(api) {
          this._super()
        }
      }
-   })
+   }),
+
+  api.modifyClass('controller:group', {
+    actions: {
+      messageGroup() {
+        this.send("createNewMessageViaParams", "");
+      }
+    }
+  }),
+
+  api.modifyClass('component:group-card-contents', {
+    actions: {
+      messageGroup() {
+        this.createNewMessageViaParams("");
+      }
+    }
+  })
 };
 
 export default {
