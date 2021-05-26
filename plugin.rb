@@ -231,6 +231,10 @@ after_initialize do
   add_to_serializer(:current_user, :fellow_icij_project_members) { User.members_visible_icij_groups(object).pluck(:id) }
   add_to_serializer(:current_user, :icij_project_categories) { Category.visible_icij_groups_categories(object).pluck(:id) }
 
+  add_to_class(:Site, :groups) do
+    Group.visible_icij_groups(@guardian.user)
+  end
+
   add_to_class(:UserSearch, :initialize) do |term, opts = {}|
     @term = term
     @term_like = "#{term.downcase.gsub("_", "\\_")}%"
