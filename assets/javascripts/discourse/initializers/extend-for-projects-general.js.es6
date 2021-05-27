@@ -30,6 +30,7 @@ import Topic from "discourse/models/topic";
 function initializePlugin(api) {
   api.reopenWidget("quick-access-panel", {
     getItems() {
+      console.log('hello in here');
       let data = Session.currentProp(`${this.key}-items`)
       let isArray = data instanceof Array
       if (isArray) {
@@ -40,8 +41,7 @@ function initializePlugin(api) {
   }),
 
   api.modifySelectKit("group-dropdown").modifyContent((context, existingContent) => {
-    let projects = User.currentProp("current_user_icij_projects");
-    projects = projects.map(p => p.name);
+    const projects = User.currentProp("current_user_icij_projects").map(p => p.name);
     return existingContent.filter(g => projects.includes(g));
   }),
 

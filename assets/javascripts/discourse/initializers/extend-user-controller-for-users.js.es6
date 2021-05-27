@@ -10,9 +10,7 @@ export default {
     UserController.reopen({
       @computed("model")
       canViewFullProfile(model) {
-        let currentUser = this.currentUser;
-        let result = (currentUser.admin) || (currentUser.name === model.name);
-        return result;
+        return this.currentUser.admin || this.currentUser.name === model.name
       }
     })
   }
