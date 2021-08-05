@@ -62,8 +62,16 @@ function initializePlugin(api) {
         categories = existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === gn[0])));
         break;
       case (discoveryRoutesToCheck.includes(discoveryRouteName)):
-        gn = gn.concat(route.controllerFor('discovery').get('category.icij_projects_for_category') || [])
-        categories = (gn.length === 0) ? existingContent.filter(c => icijProjectCategories.includes(c.id)) : existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === gn[0])))
+        if (discoveryRouteName === 'discovery.category') {
+          gn = gn.concat(route.controllerFor('discovery').get('category.name') || [])
+          categories = existingContent.filter(c => c.name === gn[0])
+        } else if (discoveryRouteName === 'discovery.categoryWithID') {
+          gn = gn.concat(route.controllerFor('discovery').get('category.parentCategory.name') || [])
+          categories = existingContent.filter(c => c.name === gn[0])
+        } else {
+          gn = gn.concat(route.controllerFor('discovery').get('category.icij_projects_for_category') || [])
+          categories = (gn.length === 0) ? existingContent.filter(c => icijProjectCategories.includes(c.id)) : existingContent.filter(c => (icijProjectCategories.includes(c.id) && (c.icij_projects_for_category[0] === gn[0])))
+        }
         break;
       case (topicRoutesToCheck.includes(discoveryRouteName)):
         gn = gn.concat(route.controllerFor('topic').get('model.category.group_names') || [])
